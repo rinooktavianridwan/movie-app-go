@@ -2,7 +2,7 @@
 
 Sistem Informasi Bioskop berbasis REST API menggunakan Go, Gin, GORM, dan PostgreSQL.
 
-<img width="1260" height="806" alt="Movie-App-Go drawio" src="https://github.com/user-attachments/assets/adc50472-f2eb-4c07-9bc8-8704b291c38a" />
+<img width="1260" height="806" alt="Movie-App-Go drawio (1)" src="https://github.com/user-attachments/assets/21adba4e-2da2-45ce-826f-aa871f6b46ac" />
 
 
 ## Struktur Project
