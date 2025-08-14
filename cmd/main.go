@@ -4,7 +4,7 @@ import (
     "github.com/joho/godotenv"
 	"os"
 	"fmt"
-	"github.com/rinooktavianridwan/movie-app-go/database"
+	"movie-app-go/database"
 )
 
 func main() {
