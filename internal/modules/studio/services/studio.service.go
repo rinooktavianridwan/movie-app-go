@@ -1,9 +1,11 @@
 package services
 
 import (
+	"errors"
 	"gorm.io/gorm"
 	"movie-app-go/internal/models"
 	"movie-app-go/internal/modules/studio/requests"
+	"movie-app-go/internal/repository"
 )
 
 type StudioService struct {
@@ -26,6 +28,14 @@ func (s *StudioService) CreateStudio(req *requests.CreateStudioRequest) (*models
 			return err
 		}
 
+		var count int64
+		if err := tx.Model(&models.Facility{}).Where("id IN ?", req.FacilityIDs).Count(&count).Error; err != nil {
+			return err
+		}
+		if count != int64(len(req.FacilityIDs)) {
+			return errors.New("some facility_ids are invalid")
+		}
+		
 		facilityStudios := make([]models.FacilityStudio, 0, len(req.FacilityIDs))
 		for _, fid := range req.FacilityIDs {
 			facilityStudios = append(facilityStudios, models.FacilityStudio{
@@ -47,29 +57,16 @@ func (s *StudioService) CreateStudio(req *requests.CreateStudioRequest) (*models
 	return studio, nil
 }
 
-func (s *StudioService) GetAllStudios() ([]models.Studio, error) {
-	var studios []models.Studio
-	if err := s.DB.Find(&studios).Error; err != nil {
-		return nil, err
-	}
-	return studios, nil
+func (s *StudioService) GetAllStudiosPaginated(page, perPage int) (repository.PaginationResult[models.Studio], error) {
+	return repository.PaginateWithPreload[models.Studio](s.DB, page, perPage, "FacilityStudios.Facility")
 }
 
-func (s *StudioService) GetStudioByID(id uint) (*models.Studio, []uint, error) {
+func (s *StudioService) GetStudioByID(id uint) (*models.Studio, error) {
 	var studio models.Studio
-	if err := s.DB.First(&studio, id).Error; err != nil {
-		return nil, nil, err
+	if err := s.DB.Preload("FacilityStudios.Facility").First(&studio, id).Error; err != nil {
+		return nil, err
 	}
-
-	var facilityStudios []models.FacilityStudio
-	if err := s.DB.Where("studio_id = ?", id).Find(&facilityStudios).Error; err != nil {
-		return nil, nil, err
-	}
-	var facilityIDs []uint
-	for _, fs := range facilityStudios {
-		facilityIDs = append(facilityIDs, fs.FacilityID)
-	}
-	return &studio, facilityIDs, nil
+	return &studio, nil
 }
 
 func (s *StudioService) UpdateStudio(id uint, req *requests.CreateStudioRequest) (*models.Studio, error) {
@@ -83,10 +80,17 @@ func (s *StudioService) UpdateStudio(id uint, req *requests.CreateStudioRequest)
 		if err := tx.Save(&studio).Error; err != nil {
 			return err
 		}
-		// Hapus relasi lama
 		if err := tx.Where("studio_id = ?", id).Delete(&models.FacilityStudio{}).Error; err != nil {
 			return err
 		}
+		var count int64
+		if err := tx.Model(&models.Facility{}).Where("id IN ?", req.FacilityIDs).Count(&count).Error; err != nil {
+			return err
+		}
+		if count != int64(len(req.FacilityIDs)) {
+			return errors.New("some facility_ids are invalid")
+		}
+		
 		facilityStudios := make([]models.FacilityStudio, 0, len(req.FacilityIDs))
 		for _, fid := range req.FacilityIDs {
 			facilityStudios = append(facilityStudios, models.FacilityStudio{

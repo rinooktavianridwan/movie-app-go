@@ -3,6 +3,7 @@ package services
 import (
 	"movie-app-go/internal/models"
 	"movie-app-go/internal/modules/studio/requests"
+    "movie-app-go/internal/repository"
 	"gorm.io/gorm"
 )
 
@@ -22,12 +23,8 @@ func (s *FacilityService) CreateFacility(req *requests.CreateFacilityRequest) (*
 	return &facility, nil
 }
 
-func (s *FacilityService) GetAllFacilities() ([]models.Facility, error) {
-    var facilities []models.Facility
-    if err := s.DB.Find(&facilities).Error; err != nil {
-        return nil, err
-    }
-    return facilities, nil
+func (s *FacilityService) GetAllFacilitiesPaginated(page, perPage int) (repository.PaginationResult[models.Facility], error) {
+    return repository.Paginate[models.Facility](s.DB, page, perPage)
 }
 
 func (s *FacilityService) GetFacilityByID(id uint) (*models.Facility, error) {
