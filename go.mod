@@ -1,4 +1,4 @@
-module github.com/rinooktavianridwan/movie-app-go
+module movie-app-go
 
 go 1.24.6
 
