@@ -84,3 +84,25 @@ func (s *AuthService) Login(req *requests.LoginRequest) (*models.User, string, e
 	}
 	return &user, tokenString, nil
 }
+
+func (s *AuthService) Logout(tokenString string) error {
+    secret := os.Getenv("JWT_SECRET")
+    if secret == "" {
+        secret = "secret"
+    }
+    token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+        return []byte(secret), nil
+    })
+    if err != nil || !token.Valid {
+        return fmt.Errorf("invalid token")
+    }
+    claims, ok := token.Claims.(jwt.MapClaims)
+    if !ok || claims["exp"] == nil {
+        return fmt.Errorf("invalid token claims")
+    }
+    exp := int64(claims["exp"].(float64)) - time.Now().Unix()
+    if exp < 0 {
+        exp = 0
+    }
+    return BlacklistToken(tokenString, time.Duration(exp)*time.Second)
+}

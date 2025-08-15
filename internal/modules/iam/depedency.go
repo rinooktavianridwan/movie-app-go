@@ -14,6 +14,7 @@ type IAMModule struct {
 }
 
 func NewIAMModule(db *gorm.DB) *IAMModule {
+    services.InitRedis()
     userService := services.NewUserService(db)
     authService := services.NewAuthService(db)
     userController := controllers.NewUserController(userService)
@@ -32,4 +33,5 @@ func RegisterRoutes(r *gin.RouterGroup, iam *IAMModule) {
 
     r.POST("/auth/register", iam.AuthController.Register)
     r.POST("/auth/login", iam.AuthController.Login)
+    r.POST("/auth/logout", iam.AuthController.Logout)
 }

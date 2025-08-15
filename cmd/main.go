@@ -6,7 +6,7 @@ import (
     "os"
     "fmt"
     "movie-app-go/database"
-    "movie-app-go/database/seed"
+    // "movie-app-go/database/seed"
     "movie-app-go/internal/modules/iam"
 )
 
@@ -25,10 +25,10 @@ func main() {
     }
 
     // Jalankan seeder user
-    if err := seed.SeedUsers(db); err != nil {
-        fmt.Println("Gagal seeding user:", err)
-        return
-    }
+    // if err := seed.SeedUsers(db); err != nil {
+    //     fmt.Println("Gagal seeding user:", err)
+    //     return
+    // }
 
     // Dependency injection
     iamModule := iam.NewIAMModule(db)
