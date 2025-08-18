@@ -3,10 +3,12 @@ package main
 import (
 	"fmt"
 	"movie-app-go/database"
+
 	// "movie-app-go/database/seed"
 	"movie-app-go/internal/modules/iam"
-	"movie-app-go/internal/modules/studio"
 	"movie-app-go/internal/modules/movie"
+	"movie-app-go/internal/modules/schedule"
+	"movie-app-go/internal/modules/studio"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -36,12 +38,14 @@ func main() {
 	iamModule := iam.NewIAMModule(db)
 	studioModule := studio.NewStudioModule(db)
 	movieModule := movie.NewMovieModule(db)
+	scheduleModule := schedule.NewScheduleModule(db)
 
 	// Setup Gin
 	r := gin.Default()
 	iam.RegisterRoutes(r.Group("/api"), iamModule)
 	studio.RegisterRoutes(r.Group("/api"), studioModule)
 	movie.RegisterRoutes(r.Group("/api"), movieModule)
+	schedule.RegisterRoutes(r.Group("/api"), scheduleModule)
 
 	// Run server
 	r.Run(":" + port)
