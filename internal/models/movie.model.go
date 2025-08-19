@@ -7,4 +7,5 @@ type Movie struct {
 	Title    string `json:"title"`
 	Overview string `json:"overview"`
 	Duration uint    `json:"duration"`
+	MovieGenres []MovieGenre  `gorm:"foreignKey:MovieID" json:"movie_genres"`
 }
