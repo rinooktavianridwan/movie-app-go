@@ -6,6 +6,7 @@ import (
 
 	// "movie-app-go/database/seed"
 	"movie-app-go/internal/modules/iam"
+	"movie-app-go/internal/modules/genre"
 	"movie-app-go/internal/modules/movie"
 	"movie-app-go/internal/modules/schedule"
 	"movie-app-go/internal/modules/studio"
@@ -38,6 +39,7 @@ func main() {
 	iamModule := iam.NewIAMModule(db)
 	studioModule := studio.NewStudioModule(db)
 	movieModule := movie.NewMovieModule(db)
+	genreModule := genre.NewGenreModule(db)
 	scheduleModule := schedule.NewScheduleModule(db)
 
 	// Setup Gin
@@ -45,6 +47,7 @@ func main() {
 	iam.RegisterRoutes(r.Group("/api"), iamModule)
 	studio.RegisterRoutes(r.Group("/api"), studioModule)
 	movie.RegisterRoutes(r.Group("/api"), movieModule)
+	genre.RegisterRoutes(r.Group("/api"), genreModule)
 	schedule.RegisterRoutes(r.Group("/api"), scheduleModule)
 
 	// Run server

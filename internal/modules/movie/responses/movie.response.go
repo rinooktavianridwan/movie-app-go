@@ -2,6 +2,7 @@ package responses
 
 import (
 	"movie-app-go/internal/models"
+	"movie-app-go/internal/modules/genre/responses"
 )
 
 type MovieResponse struct {
@@ -9,7 +10,7 @@ type MovieResponse struct {
 	Title    string          `json:"title"`
 	Overview string          `json:"overview"`
 	Duration uint            `json:"duration"`
-	Genres   []GenreResponse `json:"genres"`
+	Genres   []responses.GenreResponse `json:"genres"`
 }
 
 type PaginatedMovieResponse struct {
@@ -22,9 +23,9 @@ type PaginatedMovieResponse struct {
 
 // Converter functions
 func ToMovieResponse(movie *models.Movie) MovieResponse {
-	genres := make([]GenreResponse, len(movie.MovieGenres))
+	genres := make([]responses.GenreResponse, len(movie.MovieGenres))
 	for i, mg := range movie.MovieGenres {
-		genres[i] = GenreResponse{
+		genres[i] = responses.GenreResponse{
 			ID:   mg.Genre.ID,
 			Name: mg.Genre.Name,
 		}

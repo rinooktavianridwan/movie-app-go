@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"movie-app-go/internal/modules/movie/requests"
-	"movie-app-go/internal/modules/movie/responses"
-	"movie-app-go/internal/modules/movie/services"
+	"movie-app-go/internal/modules/genre/requests"
+	"movie-app-go/internal/modules/genre/responses"
+	"movie-app-go/internal/modules/genre/services"
 
 	"github.com/gin-gonic/gin"
 )
