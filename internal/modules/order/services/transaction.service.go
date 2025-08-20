@@ -73,7 +73,7 @@ func (s *TransactionService) CreateTransaction(userID uint, req *requests.Create
 				TransactionID: transaction.ID,
 				ScheduleID:    req.ScheduleID,
 				SeatNumber:    seatNum,
-				Status:        constants.TicketStatusActive,
+				Status:        constants.TicketStatusPending,
 				Price:         schedule.Price,
 			})
 		}
@@ -137,7 +137,7 @@ func (s *TransactionService) GetTransactionByID(id uint, userID *uint) (*models.
 	return &transaction, nil
 }
 
-func (s *TransactionService) UpdateTransactionStatus(id uint, req *requests.UpdateTransactionRequest) (*models.Transaction, error) {
+func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymentRequest) (*models.Transaction, error) {
 	var transaction models.Transaction
 
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
@@ -154,14 +154,19 @@ func (s *TransactionService) UpdateTransactionStatus(id uint, req *requests.Upda
 			return err
 		}
 
-		// Jika payment failed, cancel semua tickets
-		if req.PaymentStatus == constants.PaymentStatusFailed {
-			if err := tx.Model(&models.Ticket{}).
-				Where("transaction_id = ?", id).
-				Update("status", constants.TicketStatusCancelled).Error; err != nil {
-				return err
-			}
-		}
+		if req.PaymentStatus == constants.PaymentStatusSuccess {
+            if err := tx.Model(&models.Ticket{}).
+                Where("transaction_id = ?", id).
+                Update("status", constants.TicketStatusActive).Error; err != nil {
+                return err
+            }
+        } else if req.PaymentStatus == constants.PaymentStatusFailed {
+            if err := tx.Model(&models.Ticket{}).
+                Where("transaction_id = ?", id).
+                Update("status", constants.TicketStatusCancelled).Error; err != nil {
+                return err
+            }
+        }
 
 		return nil
 	})

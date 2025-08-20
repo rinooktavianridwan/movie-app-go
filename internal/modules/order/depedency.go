@@ -27,17 +27,17 @@ func NewOrderModule(db *gorm.DB, queueService *jobs.QueueService) *OrderModule {
 }
 
 func RegisterRoutes(rg *gin.RouterGroup, module *OrderModule) {
-	// Transaction routes
+	// Transaction
 	rg.POST("/transactions", middleware.Auth(), module.TransactionController.Create)
 	rg.GET("/transactions/my", middleware.Auth(), module.TransactionController.GetMyTransactions)
 	rg.GET("/transactions", middleware.AdminOnly(), module.TransactionController.GetAll)
 	rg.GET("/transactions/:id", middleware.Auth(), module.TransactionController.GetByID)
-	rg.PUT("/transactions/:id/status", middleware.AdminOnly(), module.TransactionController.UpdateStatus)
+	rg.POST("/transactions/:id/payment", middleware.AdminOnly(), module.TransactionController.ProcessPayment)
 
-	// Ticket routes
+	// Ticket
 	rg.GET("/tickets/my", middleware.Auth(), module.TicketController.GetMyTickets)
 	rg.GET("/tickets", middleware.AdminOnly(), module.TicketController.GetAll)
 	rg.GET("/tickets/:id", middleware.Auth(), module.TicketController.GetByID)
-	rg.PUT("/tickets/:id/status", middleware.Auth(), module.TicketController.UpdateStatus)
-	rg.GET("/schedules/:schedule_id/tickets", middleware.AdminOnly(), module.TicketController.GetBySchedule)
+	rg.GET("/tickets/by-schedule/:schedule_id", middleware.AdminOnly(), module.TicketController.GetBySchedule)
+	rg.POST("/tickets/:id/scan", middleware.Auth(), module.TicketController.ScanTicket)
 }

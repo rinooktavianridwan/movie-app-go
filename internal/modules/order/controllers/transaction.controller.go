@@ -3,6 +3,7 @@ package controllers
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"movie-app-go/internal/models"
 	"movie-app-go/internal/modules/order/requests"
@@ -36,7 +37,8 @@ func (c *TransactionController) Create(ctx *gin.Context) {
 		return
 	}
 
-	transaction, err := c.TransactionService.CreateTransaction(userID.(uint), &req)
+	userIDUint := uint(userID.(float64))
+	transaction, err := c.TransactionService.CreateTransaction(userIDUint, &req)
 	if err != nil {
 		if err.Error() == "schedule not found" {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
@@ -68,7 +70,8 @@ func (c *TransactionController) GetMyTransactions(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	perPage, _ := strconv.Atoi(ctx.DefaultQuery("per_page", "10"))
 
-	result, err := c.TransactionService.GetTransactionsByUser(userID.(uint), page, perPage)
+	userIDUint := uint(userID.(float64))
+	result, err := c.TransactionService.GetTransactionsByUser(userIDUint, page, perPage)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -132,7 +135,7 @@ func (c *TransactionController) GetByID(ctx *gin.Context) {
 		transaction, err = c.TransactionService.GetTransactionByID(uint(id), nil)
 	} else {
 		// User can only see their own transactions
-		userIDUint := userID.(uint)
+		userIDUint := uint(userID.(float64))
 		transaction, err = c.TransactionService.GetTransactionByID(uint(id), &userIDUint)
 	}
 
@@ -148,24 +151,25 @@ func (c *TransactionController) GetByID(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, responses.ToTransactionResponse(transaction))
 }
 
-// Update Transaction Status (Admin only - for payment processing)
-func (c *TransactionController) UpdateStatus(ctx *gin.Context) {
+func (c *TransactionController) ProcessPayment(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid transaction id"})
 		return
 	}
 
-	var req requests.UpdateTransactionRequest
+	var req requests.ProcessPaymentRequest // New request struct
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	transaction, err := c.TransactionService.UpdateTransactionStatus(uint(id), &req)
+	transaction, err := c.TransactionService.ProcessPayment(uint(id), &req)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			ctx.JSON(http.StatusNotFound, gin.H{"error": "transaction not found"})
+		} else if err.Error() == "transaction status can only be updated from pending" {
+			ctx.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		} else {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		}
@@ -173,8 +177,9 @@ func (c *TransactionController) UpdateStatus(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"message":        "transaction status updated",
+		"message":        "payment processed successfully",
 		"transaction_id": transaction.ID,
 		"payment_status": transaction.PaymentStatus,
+		"processed_at":   time.Now(),
 	})
 }
