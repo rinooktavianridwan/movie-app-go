@@ -14,4 +14,7 @@ type Schedule struct {
 	EndTime   time.Time `json:"end_time"`
 	Date      time.Time `json:"date"`
 	Price     float64   `json:"price"`
+
+	Movie  Movie  `gorm:"foreignKey:MovieID" json:"movie"`
+	Studio Studio `gorm:"foreignKey:StudioID" json:"studio"`
 }

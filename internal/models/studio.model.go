@@ -7,4 +7,5 @@ type Studio struct {
 	Name            string           `json:"name"`
 	SeatCapacity    uint             `json:"seat_capacity"`
 	FacilityStudios []FacilityStudio `gorm:"foreignKey:StudioID"`
+	Schedules       []Schedule       `gorm:"foreignKey:StudioID" json:"schedules"`
 }

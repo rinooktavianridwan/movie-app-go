@@ -58,7 +58,11 @@ func (s *StudioService) CreateStudio(req *requests.CreateStudioRequest) (*models
 }
 
 func (s *StudioService) GetAllStudiosPaginated(page, perPage int) (repository.PaginationResult[models.Studio], error) {
-	return repository.PaginateWithPreload[models.Studio](s.DB, page, perPage, "FacilityStudios.Facility")
+    return repository.Paginate[models.Studio](
+        s.DB.Preload("FacilityStudios.Facility"),
+        page,
+        perPage,
+    )
 }
 
 func (s *StudioService) GetStudioByID(id uint) (*models.Studio, error) {

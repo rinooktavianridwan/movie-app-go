@@ -1,4 +1,4 @@
-package internal
+package constants
 
 const (
 	PaymentMethodCreditCard = "credit_card"
