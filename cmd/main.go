@@ -50,9 +50,9 @@ func main() {
 	}()
 
 	// Jalankan seeder user
-	// if err := seed.RunAllSeeders(db); err != nil {
-	// 	panic(err)
-	// }
+	if err := seed.RunAllSeeders(db); err != nil {
+		panic(err)
+	}
 
 	// Dependency injection
 	iamModule := iam.NewIAMModule(db)

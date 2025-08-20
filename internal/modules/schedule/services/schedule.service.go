@@ -111,64 +111,81 @@ func (s *ScheduleService) CreateSchedule(req *requests.CreateScheduleRequest) (*
 }
 
 func (s *ScheduleService) UpdateSchedule(id uint, req *requests.UpdateScheduleRequest) (*models.Schedule, error) {
-	var schedule models.Schedule
-	err := s.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.First(&schedule, id).Error; err != nil {
-			return err
-		}
+    var schedule models.Schedule
+    err := s.DB.Transaction(func(tx *gorm.DB) error {
+        if err := tx.First(&schedule, id).Error; err != nil {
+            return err
+        }
 
-		var movie models.Movie
-		if err := tx.First(&movie, req.MovieID).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return fmt.Errorf("movie not found")
-			}
-			return err
-		}
+        if req.MovieID != nil {
+            var movie models.Movie
+            if err := tx.First(&movie, *req.MovieID).Error; err != nil {
+                if err == gorm.ErrRecordNotFound {
+                    return fmt.Errorf("movie not found")
+                }
+                return err
+            }
+            schedule.MovieID = *req.MovieID
+        }
 
-		var studio models.Studio
-		if err := tx.First(&studio, req.StudioID).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return fmt.Errorf("studio not found")
-			}
-			return err
-		}
+        if req.StudioID != nil {
+            var studio models.Studio
+            if err := tx.First(&studio, *req.StudioID).Error; err != nil {
+                if err == gorm.ErrRecordNotFound {
+                    return fmt.Errorf("studio not found")
+                }
+                return err
+            }
+            schedule.StudioID = *req.StudioID
+        }
 
-		bufferMinutes := 30
-		totalMinutes := int(movie.Duration) + bufferMinutes
-		endTime := req.StartTime.Add(time.Duration(totalMinutes) * time.Minute)
+        if req.StartTime != nil {
+            schedule.StartTime = *req.StartTime
+        }
 
-		if req.Date.Before(time.Now().Truncate(24 * time.Hour)) {
-			return fmt.Errorf("date cannot be in the past")
-		}
+        if req.Date != nil {
+            if req.Date.Before(time.Now().Truncate(24 * time.Hour)) {
+                return fmt.Errorf("date cannot be in the past")
+            }
+            schedule.Date = *req.Date
+        }
 
-		var conflictCount int64
-		if err := tx.Model(&models.Schedule{}).
-			Where("id != ? AND studio_id = ? AND date = ? AND ((start_time <= ? AND end_time > ?) OR (start_time < ? AND end_time >= ?) OR (start_time >= ? AND end_time <= ?))",
-				id, req.StudioID, req.Date, req.StartTime, req.StartTime, endTime, endTime, req.StartTime, endTime).
-			Count(&conflictCount).Error; err != nil {
-			return err
-		}
-		if conflictCount > 0 {
-			return fmt.Errorf("schedule conflict: studio is already booked at this time")
-		}
+        if req.Price != nil {
+            schedule.Price = *req.Price
+        }
 
-		schedule.MovieID = req.MovieID
-		schedule.StudioID = req.StudioID
-		schedule.StartTime = req.StartTime
-		schedule.EndTime = endTime
-		schedule.Date = req.Date
-		schedule.Price = req.Price
+        if req.MovieID != nil || req.StartTime != nil {
+            var movie models.Movie
+            if err := tx.First(&movie, schedule.MovieID).Error; err != nil {
+                return err
+            }
+            
+            bufferMinutes := 30
+            totalMinutes := int(movie.Duration) + bufferMinutes
+            schedule.EndTime = schedule.StartTime.Add(time.Duration(totalMinutes) * time.Minute)
+        }
 
-		if err := tx.Save(&schedule).Error; err != nil {
-			return err
-		}
-		return nil
-	})
+        var conflictCount int64
+        if err := tx.Model(&models.Schedule{}).
+            Where("id != ? AND studio_id = ? AND date = ? AND ((start_time <= ? AND end_time > ?) OR (start_time < ? AND end_time >= ?) OR (start_time >= ? AND end_time <= ?))",
+                id, schedule.StudioID, schedule.Date, schedule.StartTime, schedule.StartTime, schedule.EndTime, schedule.EndTime, schedule.StartTime, schedule.EndTime).
+            Count(&conflictCount).Error; err != nil {
+            return err
+        }
+        if conflictCount > 0 {
+            return fmt.Errorf("schedule conflict: studio is already booked at this time")
+        }
 
-	if err != nil {
-		return nil, err
-	}
-	return &schedule, nil
+        if err := tx.Save(&schedule).Error; err != nil {
+            return err
+        }
+        return nil
+    })
+
+    if err != nil {
+        return nil, err
+    }
+    return &schedule, nil
 }
 
 func (s *ScheduleService) DeleteSchedule(id uint) error {
