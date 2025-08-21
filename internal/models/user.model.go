@@ -8,4 +8,6 @@ type User struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	IsAdmin  bool   `json:"is_admin"`
+
+	Transactions []Transaction `gorm:"foreignKey:UserID" json:"transactions,omitempty"`
 }
