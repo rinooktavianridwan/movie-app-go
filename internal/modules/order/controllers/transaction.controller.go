@@ -22,9 +22,7 @@ func NewTransactionController(s *services.TransactionService) *TransactionContro
 	return &TransactionController{TransactionService: s}
 }
 
-// Create Transaction (User creates booking)
 func (c *TransactionController) Create(ctx *gin.Context) {
-	// Get user ID from JWT token
 	userID, exists := ctx.Get("user_id")
 	if !exists {
 		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
@@ -59,7 +57,6 @@ func (c *TransactionController) Create(ctx *gin.Context) {
 	})
 }
 
-// Get My Transactions (User gets their own transactions)
 func (c *TransactionController) GetMyTransactions(ctx *gin.Context) {
 	userID, exists := ctx.Get("user_id")
 	if !exists {
@@ -89,7 +86,6 @@ func (c *TransactionController) GetMyTransactions(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, response)
 }
 
-// Get All Transactions (Admin only)
 func (c *TransactionController) GetAll(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	perPage, _ := strconv.Atoi(ctx.DefaultQuery("per_page", "10"))
@@ -112,7 +108,6 @@ func (c *TransactionController) GetAll(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, response)
 }
 
-// Get Transaction by ID
 func (c *TransactionController) GetByID(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
@@ -120,7 +115,6 @@ func (c *TransactionController) GetByID(ctx *gin.Context) {
 		return
 	}
 
-	// Check if user is admin or owner
 	userID, exists := ctx.Get("user_id")
 	isAdmin, adminExists := ctx.Get("is_admin")
 
@@ -131,10 +125,8 @@ func (c *TransactionController) GetByID(ctx *gin.Context) {
 
 	var transaction *models.Transaction
 	if adminExists && isAdmin.(bool) {
-		// Admin can see all transactions
 		transaction, err = c.TransactionService.GetTransactionByID(uint(id), nil)
 	} else {
-		// User can only see their own transactions
 		userIDUint := uint(userID.(float64))
 		transaction, err = c.TransactionService.GetTransactionByID(uint(id), &userIDUint)
 	}
@@ -158,7 +150,7 @@ func (c *TransactionController) ProcessPayment(ctx *gin.Context) {
 		return
 	}
 
-	var req requests.ProcessPaymentRequest // New request struct
+	var req requests.ProcessPaymentRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

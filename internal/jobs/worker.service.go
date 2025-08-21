@@ -3,6 +3,8 @@ package jobs
 import (
 	"log"
 
+	"movie-app-go/internal/constants"
+
 	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
 )
@@ -28,8 +30,7 @@ func NewWorkerService(redisAddr string, db *gorm.DB) *WorkerService {
 	mux := asynq.NewServeMux()
 	paymentHandler := NewPaymentJobHandler(db)
 
-	// Register handlers
-	mux.HandleFunc(TypePaymentTimeout, paymentHandler.HandlePaymentTimeout)
+	mux.HandleFunc(constants.TypePaymentTimeout, paymentHandler.HandlePaymentTimeout)
 
 	return &WorkerService{
 		server: server,

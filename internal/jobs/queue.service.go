@@ -3,11 +3,9 @@ package jobs
 import (
 	"time"
 
-	"github.com/hibiken/asynq"
-)
+	"movie-app-go/internal/constants"
 
-const (
-	TypePaymentTimeout = "payment:timeout"
+	"github.com/hibiken/asynq"
 )
 
 type QueueService struct {
@@ -25,9 +23,8 @@ func (q *QueueService) SchedulePaymentTimeout(transactionID uint, delay time.Dur
 		return err
 	}
 
-	task := asynq.NewTask(TypePaymentTimeout, payload)
+	task := asynq.NewTask(constants.TypePaymentTimeout, payload)
 
-	// Schedule task to run after delay
 	_, err = q.client.Enqueue(task, asynq.ProcessIn(delay))
 	return err
 }

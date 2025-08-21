@@ -24,7 +24,6 @@ func NewPaymentJobHandler(db *gorm.DB) *PaymentJobHandler {
     return &PaymentJobHandler{DB: db}
 }
 
-// Handle payment timeout job
 func (h *PaymentJobHandler) HandlePaymentTimeout(ctx context.Context, t *asynq.Task) error {
     var payload PaymentTimeoutJob
     if err := json.Unmarshal(t.Payload(), &payload); err != nil {
@@ -33,7 +32,6 @@ func (h *PaymentJobHandler) HandlePaymentTimeout(ctx context.Context, t *asynq.T
 
     log.Printf("Processing payment timeout for transaction ID: %d", payload.TransactionID)
 
-    // Update transaction dan cancel tickets dalam transaction
     err := h.DB.Transaction(func(tx *gorm.DB) error {
         var transaction models.Transaction
         if err := tx.First(&transaction, payload.TransactionID).Error; err != nil {
@@ -44,19 +42,16 @@ func (h *PaymentJobHandler) HandlePaymentTimeout(ctx context.Context, t *asynq.T
             return err
         }
 
-        // Hanya process jika masih pending
         if transaction.PaymentStatus != constants.PaymentStatusPending {
             log.Printf("Transaction %d status is %s, skipping", payload.TransactionID, transaction.PaymentStatus)
             return nil
         }
 
-        // Update transaction status to failed
         transaction.PaymentStatus = constants.PaymentStatusFailed
         if err := tx.Save(&transaction).Error; err != nil {
             return err
         }
-
-        // Cancel all tickets
+        
         if err := tx.Model(&models.Ticket{}).
             Where("transaction_id = ?", payload.TransactionID).
             Update("status", constants.TicketStatusCancelled).Error; err != nil {
@@ -70,7 +65,6 @@ func (h *PaymentJobHandler) HandlePaymentTimeout(ctx context.Context, t *asynq.T
     return err
 }
 
-// Create job payload
 func CreatePaymentTimeoutPayload(transactionID uint) ([]byte, error) {
     payload := PaymentTimeoutJob{
         TransactionID: transactionID,

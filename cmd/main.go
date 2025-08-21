@@ -38,11 +38,9 @@ func main() {
 		return
 	}
 
-	// Initialize job queue
 	queueService := jobs.NewQueueService(redisAddr)
 	workerService := jobs.NewWorkerService(redisAddr, db)
 
-	// Start worker in goroutine
 	go func() {
 		if err := workerService.Start(); err != nil {
 			fmt.Printf("Could not start worker: %v\n", err)
