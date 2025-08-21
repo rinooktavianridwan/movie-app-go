@@ -57,6 +57,10 @@ func (h *PaymentJobHandler) HandlePaymentTimeout(ctx context.Context, t *asynq.T
             Update("status", constants.TicketStatusCancelled).Error; err != nil {
             return err
         }
+        
+        if err := tx.Where("transaction_id = ?", payload.TransactionID).Delete(&models.Ticket{}).Error; err != nil {
+            return err
+        }
 
         log.Printf("Transaction %d marked as failed and tickets cancelled", payload.TransactionID)
         return nil

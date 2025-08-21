@@ -90,10 +90,6 @@ func (s *TicketService) ScanTicket(id uint, userID *uint) (*models.Ticket, error
 			return err
 		}
 
-		if ticket.Transaction.PaymentStatus != constants.PaymentStatusSuccess {
-            return fmt.Errorf("payment not confirmed")
-        }
-
 		switch ticket.Status {
 		case constants.TicketStatusPending:
 			return fmt.Errorf("payment not confirmed")

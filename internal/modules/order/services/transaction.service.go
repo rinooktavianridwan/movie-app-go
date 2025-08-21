@@ -146,7 +146,7 @@ func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymen
 		}
 
 		if transaction.PaymentStatus != constants.PaymentStatusPending {
-			return fmt.Errorf("transaction status can only be updated from pending")
+			return fmt.Errorf("transaction already failed or timed out")
 		}
 
 		transaction.PaymentStatus = req.PaymentStatus
