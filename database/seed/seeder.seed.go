@@ -53,6 +53,26 @@ func RunAllSeeders(db *gorm.DB) error {
 		return err
 	}
 
+	// Seed Schedules
+    schedules, err := SeedSchedules(db)
+    if err != nil {
+        log.Println("SeedSchedules error:", err)
+        return err
+    }
+
+    // Seed Transactions
+    transactions, err := SeedTransactions(db)
+    if err != nil {
+        log.Println("SeedTransactions error:", err)
+        return err
+    }
+
+    // Seed Tickets
+    if err := SeedTickets(db, transactions, schedules); err != nil {
+        log.Println("SeedTickets error:", err)
+        return err
+    }
+
 	log.Println("All seeders completed successfully!")
 	return nil
 }

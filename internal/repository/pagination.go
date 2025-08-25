@@ -40,3 +40,34 @@ func Paginate[T any](db *gorm.DB, page, perPage int) (PaginationResult[T], error
 	}
 	return result, nil
 }
+
+func PaginateRaw[T any](dataQuery *gorm.DB, countQuery *gorm.DB, page, perPage int) (PaginationResult[T], error) {
+    var result PaginationResult[T]
+    var data []T
+    var total int64
+
+    if page < 1 {
+        page = 1
+    }
+    if perPage < 1 {
+        perPage = 10
+    }
+
+    if err := countQuery.Count(&total).Error; err != nil {
+        return result, err
+    }
+
+    offset := (page - 1) * perPage
+    if err := dataQuery.Limit(perPage).Offset(offset).Scan(&data).Error; err != nil {
+        return result, err
+    }
+
+    result = PaginationResult[T]{
+        Page:       page,
+        PerPage:    perPage,
+        Total:      total,
+        TotalPages: int((total + int64(perPage) - 1) / int64(perPage)),
+        Data:       data,
+    }
+    return result, nil
+}

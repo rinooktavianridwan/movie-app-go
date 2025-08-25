@@ -13,6 +13,7 @@ import (
 	"movie-app-go/internal/modules/order"
 	"movie-app-go/internal/modules/schedule"
 	"movie-app-go/internal/modules/studio"
+	"movie-app-go/internal/modules/report"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -59,6 +60,7 @@ func main() {
 	genreModule := genre.NewGenreModule(db)
 	scheduleModule := schedule.NewScheduleModule(db)
 	orderModule := order.NewOrderModule(db, queueService)
+	reportModule := report.NewReportModule(db)
 
 	// Setup Gin
 	r := gin.Default()
@@ -68,6 +70,7 @@ func main() {
 	genre.RegisterRoutes(r.Group("/api"), genreModule)
 	schedule.RegisterRoutes(r.Group("/api"), scheduleModule)
 	order.RegisterRoutes(r.Group("/api"), orderModule)
+	report.RegisterRoutes(r.Group("/api"), reportModule)
 
 	// Run server
 	r.Run(":" + port)
