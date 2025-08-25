@@ -6,6 +6,7 @@ import (
 	"movie-app-go/internal/middleware"
 	"movie-app-go/internal/modules/order/controllers"
 	"movie-app-go/internal/modules/order/services"
+	promoServices "movie-app-go/internal/modules/promo/services"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -14,10 +15,12 @@ import (
 type OrderModule struct {
 	TransactionController *controllers.TransactionController
 	TicketController      *controllers.TicketController
+	TicketService         *services.TicketService
+	PromoService          *promoServices.PromoService
 }
 
-func NewOrderModule(db *gorm.DB, queueService *jobs.QueueService) *OrderModule {
-	transactionService := services.NewTransactionService(db, queueService)
+func NewOrderModule(db *gorm.DB, queueService *jobs.QueueService, promoService *promoServices.PromoService) *OrderModule {
+	transactionService := services.NewTransactionService(db, queueService, promoService)
 	ticketService := services.NewTicketService(db)
 
 	return &OrderModule{

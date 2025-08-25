@@ -6,6 +6,8 @@ import (
 	"movie-app-go/internal/jobs"
 	"movie-app-go/internal/models"
 	"movie-app-go/internal/modules/order/requests"
+	promoRequests "movie-app-go/internal/modules/promo/requests"
+	promoServices "movie-app-go/internal/modules/promo/services"
 	"movie-app-go/internal/repository"
 	"time"
 
@@ -15,10 +17,11 @@ import (
 type TransactionService struct {
 	DB           *gorm.DB
 	QueueService *jobs.QueueService
+	PromoService *promoServices.PromoService
 }
 
-func NewTransactionService(db *gorm.DB, queueService *jobs.QueueService) *TransactionService {
-	return &TransactionService{DB: db, QueueService: queueService}
+func NewTransactionService(db *gorm.DB, queueService *jobs.QueueService, promoService *promoServices.PromoService) *TransactionService {
+	return &TransactionService{DB: db, QueueService: queueService, PromoService: promoService}
 }
 
 func (s *TransactionService) CreateTransaction(userID uint, req *requests.CreateTransactionRequest) (*models.Transaction, error) {
@@ -54,17 +57,62 @@ func (s *TransactionService) CreateTransaction(userID uint, req *requests.Create
 			}
 		}
 
-		totalAmount := float64(len(req.SeatNumbers)) * schedule.Price
+		originalAmount := float64(len(req.SeatNumbers)) * schedule.Price
+		finalAmount := originalAmount
+		discountAmount := float64(0)
+		var promoID *uint
+
+		if req.PromoCode != "" && s.PromoService != nil {
+			promoValidation := &promoRequests.ValidatePromoRequest{
+				PromoCode:   req.PromoCode,
+				TotalAmount: originalAmount,
+				MovieIDs:    []uint{schedule.MovieID},
+				SeatNumbers: req.SeatNumbers,
+			}
+
+			result, err := s.PromoService.ValidatePromo(userID, promoValidation)
+			if err != nil || !result.IsValid {
+				return fmt.Errorf("invalid promo: %s", result.Message)
+			}
+
+			discountAmount = result.DiscountAmount
+			finalAmount = result.FinalAmount
+
+			promo, err := s.PromoService.GetPromoByCode(req.PromoCode)
+			if err == nil {
+				promoID = &promo.ID
+			}
+		}
 
 		transaction = &models.Transaction{
-			UserID:        userID,
-			TotalAmount:   totalAmount,
-			PaymentMethod: req.PaymentMethod,
-			PaymentStatus: constants.PaymentStatusPending,
+			UserID:         userID,
+			TotalAmount:    finalAmount,
+			OriginalAmount: &originalAmount,
+			DiscountAmount: discountAmount,
+			PaymentMethod:  req.PaymentMethod,
+			PaymentStatus:  constants.PaymentStatusPending,
+			PromoID:        promoID,
 		}
 
 		if err := tx.Create(transaction).Error; err != nil {
 			return err
+		}
+
+		if promoID != nil {
+			promoUsage := models.PromoUsage{
+				PromoID:        *promoID,
+				UserID:         userID,
+				TransactionID:  transaction.ID,
+				DiscountAmount: discountAmount,
+			}
+			if err := tx.Create(&promoUsage).Error; err != nil {
+				return err
+			}
+
+			if err := tx.Model(&models.Promo{}).Where("id = ?", *promoID).
+				UpdateColumn("usage_count", gorm.Expr("usage_count + ?", 1)).Error; err != nil {
+				return err
+			}
 		}
 
 		tickets := make([]models.Ticket, 0, len(req.SeatNumbers))
@@ -102,6 +150,7 @@ func (s *TransactionService) GetTransactionsByUser(userID uint, page, perPage in
 		Preload("Tickets.Schedule").
 		Preload("Tickets.Schedule.Movie").
 		Preload("Tickets.Schedule.Studio").
+		Preload("Promo").
 		Where("user_id = ?", userID).
 		Order("created_at DESC")
 
@@ -114,6 +163,7 @@ func (s *TransactionService) GetAllTransactions(page, perPage int) (repository.P
 		Preload("Tickets.Schedule").
 		Preload("Tickets.Schedule.Movie").
 		Preload("Tickets.Schedule.Studio").
+		Preload("Promo").
 		Order("created_at DESC")
 
 	return repository.Paginate[models.Transaction](query, page, perPage)
@@ -124,7 +174,8 @@ func (s *TransactionService) GetTransactionByID(id uint, userID *uint) (*models.
 		Preload("Tickets").
 		Preload("Tickets.Schedule").
 		Preload("Tickets.Schedule.Movie").
-		Preload("Tickets.Schedule.Studio")
+		Preload("Tickets.Schedule.Studio").
+		Preload("Promo")
 
 	if userID != nil {
 		query = query.Where("user_id = ?", *userID)
@@ -155,18 +206,18 @@ func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymen
 		}
 
 		if req.PaymentStatus == constants.PaymentStatusSuccess {
-            if err := tx.Model(&models.Ticket{}).
-                Where("transaction_id = ?", id).
-                Update("status", constants.TicketStatusActive).Error; err != nil {
-                return err
-            }
-        } else if req.PaymentStatus == constants.PaymentStatusFailed {
-            if err := tx.Model(&models.Ticket{}).
-                Where("transaction_id = ?", id).
-                Update("status", constants.TicketStatusCancelled).Error; err != nil {
-                return err
-            }
-        }
+			if err := tx.Model(&models.Ticket{}).
+				Where("transaction_id = ?", id).
+				Update("status", constants.TicketStatusActive).Error; err != nil {
+				return err
+			}
+		} else if req.PaymentStatus == constants.PaymentStatusFailed {
+			if err := tx.Model(&models.Ticket{}).
+				Where("transaction_id = ?", id).
+				Update("status", constants.TicketStatusCancelled).Error; err != nil {
+				return err
+			}
+		}
 
 		return nil
 	})
