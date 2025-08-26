@@ -2,7 +2,6 @@ package responses
 
 import (
     "movie-app-go/internal/models"
-    "time"
 )
 
 type NotificationResponse struct {
@@ -13,8 +12,6 @@ type NotificationResponse struct {
     Type      string                 `json:"type"`
     IsRead    bool                   `json:"is_read"`
     Data      map[string]interface{} `json:"data,omitempty"`
-    CreatedAt time.Time              `json:"created_at"`
-    UpdatedAt time.Time              `json:"updated_at"`
 }
 
 type PaginatedNotificationResponse struct {
@@ -40,8 +37,6 @@ func ToNotificationResponse(notification models.Notification) NotificationRespon
         Type:      notification.Type,
         IsRead:    notification.IsRead,
         Data:      notification.Data,
-        CreatedAt: notification.CreatedAt,
-        UpdatedAt: notification.UpdatedAt,
     }
 }
 
