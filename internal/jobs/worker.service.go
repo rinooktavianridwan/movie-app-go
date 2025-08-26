@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"movie-app-go/internal/constants"
+	notificationJobs "movie-app-go/internal/modules/notification/jobs"
 
 	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
@@ -12,6 +13,7 @@ import (
 type WorkerService struct {
 	server *asynq.Server
 	mux    *asynq.ServeMux
+	DB     *gorm.DB
 }
 
 func NewWorkerService(redisAddr string, db *gorm.DB) *WorkerService {
@@ -28,14 +30,15 @@ func NewWorkerService(redisAddr string, db *gorm.DB) *WorkerService {
 	)
 
 	mux := asynq.NewServeMux()
-	paymentHandler := NewPaymentJobHandler(db)
-
-	mux.HandleFunc(constants.TypePaymentTimeout, paymentHandler.HandlePaymentTimeout)
-
-	return &WorkerService{
+	ws := &WorkerService{
 		server: server,
 		mux:    mux,
+		DB:     db,
 	}
+
+	ws.registerHandlers()
+
+	return ws
 }
 
 func (w *WorkerService) Start() error {
@@ -46,4 +49,14 @@ func (w *WorkerService) Start() error {
 func (w *WorkerService) Shutdown() {
 	log.Println("Shutting down Asynq worker...")
 	w.server.Shutdown()
+}
+
+func (w *WorkerService) registerHandlers() {
+	paymentHandler := NewPaymentJobHandler(w.DB)
+	w.mux.HandleFunc(constants.TypePaymentTimeout, paymentHandler.HandlePaymentTimeout)
+
+	notificationHandler := notificationJobs.NewNotificationJobHandler(w.DB)
+	w.mux.HandleFunc(notificationJobs.TypeMovieReminder, notificationHandler.HandleMovieReminder)
+	w.mux.HandleFunc(notificationJobs.TypePromoNotification, notificationHandler.HandlePromoNotification)
+	w.mux.HandleFunc(notificationJobs.TypeBookingConfirm, notificationHandler.HandleBookingConfirmation)
 }

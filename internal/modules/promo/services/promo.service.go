@@ -2,8 +2,10 @@ package services
 
 import (
 	"fmt"
+	"log"
 	"movie-app-go/internal/constants"
 	"movie-app-go/internal/models"
+	notificationServices "movie-app-go/internal/modules/notification/services"
 	"movie-app-go/internal/modules/promo/options"
 	"movie-app-go/internal/modules/promo/requests"
 	"movie-app-go/internal/modules/promo/responses"
@@ -14,11 +16,12 @@ import (
 )
 
 type PromoService struct {
-	DB *gorm.DB
+	DB                  *gorm.DB
+	NotificationService *notificationServices.NotificationService
 }
 
 func NewPromoService(db *gorm.DB) *PromoService {
-	return &PromoService{DB: db}
+	return &PromoService{DB: db, NotificationService: notificationServices.NewNotificationService(db)}
 }
 
 func (s *PromoService) CreatePromo(req *requests.CreatePromoRequest) (*models.Promo, error) {
@@ -78,6 +81,10 @@ func (s *PromoService) CreatePromo(req *requests.CreatePromoRequest) (*models.Pr
 		return nil, err
 	}
 
+	if createdPromo.IsActive {
+		s.sendPromoNotificationAsync(createdPromo.ID, createdPromo.Name, createdPromo.Code)
+	}
+
 	return createdPromo, nil
 }
 
@@ -129,11 +136,15 @@ func (s *PromoService) GetPromoByCode(code string) (*models.Promo, error) {
 
 func (s *PromoService) UpdatePromo(id uint, req *requests.UpdatePromoRequest) (*models.Promo, error) {
 	var updatedPromo *models.Promo
+	var wasInactive bool
+
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
 		var promo models.Promo
 		if err := tx.First(&promo, id).Error; err != nil {
 			return fmt.Errorf("promo not found")
 		}
+
+		wasInactive = !promo.IsActive
 
 		if len(req.MovieIDs) > 0 {
 			var count int64
@@ -207,6 +218,10 @@ func (s *PromoService) UpdatePromo(id uint, req *requests.UpdatePromoRequest) (*
 		return nil, err
 	}
 
+	if wasInactive && updatedPromo.IsActive {
+		s.sendPromoNotificationAsync(updatedPromo.ID, updatedPromo.Name, updatedPromo.Code)
+	}
+
 	return updatedPromo, nil
 }
 
@@ -216,9 +231,14 @@ func (s *PromoService) TogglePromoStatus(id uint) (*models.Promo, error) {
 		return nil, fmt.Errorf("promo not found")
 	}
 
+	wasInactive := !promo.IsActive
 	promo.IsActive = !promo.IsActive
 	if err := s.DB.Save(&promo).Error; err != nil {
 		return nil, err
+	}
+
+	if wasInactive && promo.IsActive {
+		s.sendPromoNotificationAsync(promo.ID, promo.Name, promo.Code)
 	}
 
 	return &promo, nil
@@ -320,4 +340,18 @@ func (s *PromoService) ValidatePromo(userID uint, req *requests.ValidatePromoReq
 		FinalAmount:    finalAmount,
 		Message:        "Promo applied successfully",
 	}, nil
+}
+
+func (s *PromoService) sendPromoNotificationAsync(promoID uint, promoName, promoCode string) {
+	go func() {
+		if err := s.NotificationService.CreatePromoNotification(
+			promoID,
+			promoName,
+			promoCode,
+		); err != nil {
+			log.Printf("Failed to create promo notifications: %v", err)
+		} else {
+			log.Printf("Promo notification sent for promo: %s", promoName)
+		}
+	}()
 }
