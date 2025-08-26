@@ -37,11 +37,11 @@ func (s *ReportService) GetDailySalesReport(startDate, endDate time.Time, page, 
 
 func (s *ReportService) GetMonthlySalesReport(year int, page, perPage int) (repository.PaginationResult[responses.MonthlySalesReport], error) {
 	dataQuery := s.DB.Table("transactions t").
-		Select("TO_CHAR(t.created_at, 'Month') as month, EXTRACT(YEAR FROM t.created_at) as year, COALESCE(SUM(tk.price), 0) as total_revenue, COUNT(tk.id) as total_tickets").
+		Select("TRIM(TO_CHAR(t.created_at, 'Month')) as month, EXTRACT(YEAR FROM t.created_at) as year, COALESCE(SUM(tk.price), 0) as total_revenue, COUNT(tk.id) as total_tickets").
 		Joins("LEFT JOIN tickets tk ON t.id = tk.transaction_id").
 		Where("t.payment_status = ?", constants.PaymentStatusSuccess).
 		Where("EXTRACT(YEAR FROM t.created_at) = ?", year).
-		Group("EXTRACT(MONTH FROM t.created_at), EXTRACT(YEAR FROM t.created_at), TO_CHAR(t.created_at, 'Month')").
+		Group("EXTRACT(MONTH FROM t.created_at), EXTRACT(YEAR FROM t.created_at), TRIM(TO_CHAR(t.created_at, 'Month'))").
 		Order("EXTRACT(MONTH FROM t.created_at)")
 
 	countQuery := s.DB.Table("transactions t").
@@ -103,13 +103,13 @@ func (s *ReportService) GetDailyReportByStudio(startDate, endDate time.Time, pag
 
 func (s *ReportService) GetMonthlyReportByMovie(year int, page, perPage int) (repository.PaginationResult[responses.MonthlyMovieReport], error) {
 	dataQuery := s.DB.Table("movies m").
-		Select("TO_CHAR(t.created_at, 'Month') as month, EXTRACT(YEAR FROM t.created_at) as year, m.id as movie_id, m.title as movie_title, COALESCE(SUM(tk.price), 0) as total_revenue, COUNT(tk.id) as total_tickets").
+		Select("TRIM(TO_CHAR(t.created_at, 'Month')) as month, EXTRACT(YEAR FROM t.created_at) as year, m.id as movie_id, m.title as movie_title, COALESCE(SUM(tk.price), 0) as total_revenue, COUNT(tk.id) as total_tickets").
 		Joins("LEFT JOIN schedules s ON m.id = s.movie_id").
 		Joins("LEFT JOIN tickets tk ON s.id = tk.schedule_id").
 		Joins("LEFT JOIN transactions t ON tk.transaction_id = t.id").
 		Where("t.payment_status = ?", constants.PaymentStatusSuccess).
 		Where("EXTRACT(YEAR FROM t.created_at) = ?", year).
-		Group("EXTRACT(MONTH FROM t.created_at), EXTRACT(YEAR FROM t.created_at), TO_CHAR(t.created_at, 'Month'), m.id, m.title").
+		Group("EXTRACT(MONTH FROM t.created_at), EXTRACT(YEAR FROM t.created_at), TRIM(TO_CHAR(t.created_at, 'Month')), m.id, m.title").
 		Having("COUNT(tk.id) > 0").
 		Order("EXTRACT(MONTH FROM t.created_at), total_revenue DESC")
 
@@ -127,13 +127,13 @@ func (s *ReportService) GetMonthlyReportByMovie(year int, page, perPage int) (re
 
 func (s *ReportService) GetMonthlyReportByStudio(year int, page, perPage int) (repository.PaginationResult[responses.MonthlyStudioReport], error) {
 	dataQuery := s.DB.Table("studios st").
-		Select("TO_CHAR(t.created_at, 'Month') as month, EXTRACT(YEAR FROM t.created_at) as year, st.id as studio_id, st.name as studio_name, COALESCE(SUM(tk.price), 0) as total_revenue, COUNT(tk.id) as total_tickets").
+		Select("TRIM(TO_CHAR(t.created_at, 'Month')) as month, EXTRACT(YEAR FROM t.created_at) as year, st.id as studio_id, st.name as studio_name, COALESCE(SUM(tk.price), 0) as total_revenue, COUNT(tk.id) as total_tickets").
 		Joins("LEFT JOIN schedules s ON st.id = s.studio_id").
 		Joins("LEFT JOIN tickets tk ON s.id = tk.schedule_id").
 		Joins("LEFT JOIN transactions t ON tk.transaction_id = t.id").
 		Where("t.payment_status = ?", constants.PaymentStatusSuccess).
 		Where("EXTRACT(YEAR FROM t.created_at) = ?", year).
-		Group("EXTRACT(MONTH FROM t.created_at), EXTRACT(YEAR FROM t.created_at), TO_CHAR(t.created_at, 'Month'), st.id, st.name").
+		Group("EXTRACT(MONTH FROM t.created_at), EXTRACT(YEAR FROM t.created_at), TRIM(TO_CHAR(t.created_at, 'Month')), st.id, st.name").
 		Having("COUNT(tk.id) > 0").
 		Order("EXTRACT(MONTH FROM t.created_at), total_revenue DESC")
 
