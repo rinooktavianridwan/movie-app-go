@@ -61,7 +61,7 @@ func main() {
 	genreModule := genre.NewGenreModule(db)
 	scheduleModule := schedule.NewScheduleModule(db)
 	promoModule := promo.NewPromoModule(db)
-	orderModule := order.NewOrderModule(db, queueService, promoModule.PromoController.PromoService)
+	orderModule := order.NewOrderModule(db, queueService, promoModule.PromoService)
 	reportModule := report.NewReportModule(db)
 
 	// Setup Gin
