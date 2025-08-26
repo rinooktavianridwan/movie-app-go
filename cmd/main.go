@@ -11,6 +11,7 @@ import (
 	"movie-app-go/internal/modules/iam"
 	"movie-app-go/internal/modules/movie"
 	"movie-app-go/internal/modules/order"
+	"movie-app-go/internal/modules/promo" 
 	"movie-app-go/internal/modules/schedule"
 	"movie-app-go/internal/modules/studio"
 	"movie-app-go/internal/modules/report"
@@ -59,7 +60,8 @@ func main() {
 	movieModule := movie.NewMovieModule(db)
 	genreModule := genre.NewGenreModule(db)
 	scheduleModule := schedule.NewScheduleModule(db)
-	orderModule := order.NewOrderModule(db, queueService)
+	promoModule := promo.NewPromoModule(db)
+	orderModule := order.NewOrderModule(db, queueService, promoModule.PromoService)
 	reportModule := report.NewReportModule(db)
 
 	// Setup Gin
@@ -69,6 +71,7 @@ func main() {
 	movie.RegisterRoutes(r.Group("/api"), movieModule)
 	genre.RegisterRoutes(r.Group("/api"), genreModule)
 	schedule.RegisterRoutes(r.Group("/api"), scheduleModule)
+	promo.RegisterRoutes(r.Group("/api"), promoModule)
 	order.RegisterRoutes(r.Group("/api"), orderModule)
 	report.RegisterRoutes(r.Group("/api"), reportModule)
 
