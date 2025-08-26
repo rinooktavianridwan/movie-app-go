@@ -5,16 +5,16 @@ import (
 	"movie-app-go/database"
 	"movie-app-go/internal/jobs"
 
-
 	// "movie-app-go/database/seed"
 	"movie-app-go/internal/modules/genre"
 	"movie-app-go/internal/modules/iam"
 	"movie-app-go/internal/modules/movie"
+	"movie-app-go/internal/modules/notification"
 	"movie-app-go/internal/modules/order"
-	"movie-app-go/internal/modules/promo" 
+	"movie-app-go/internal/modules/promo"
+	"movie-app-go/internal/modules/report"
 	"movie-app-go/internal/modules/schedule"
 	"movie-app-go/internal/modules/studio"
-	"movie-app-go/internal/modules/report"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -61,20 +61,27 @@ func main() {
 	genreModule := genre.NewGenreModule(db)
 	scheduleModule := schedule.NewScheduleModule(db)
 	promoModule := promo.NewPromoModule(db)
+	notificationModule := notification.NewNotificationModule(db)
 	orderModule := order.NewOrderModule(db, queueService, promoModule.PromoController.PromoService)
 	reportModule := report.NewReportModule(db)
 
 	// Setup Gin
 	r := gin.Default()
-	iam.RegisterRoutes(r.Group("/api"), iamModule)
-	studio.RegisterRoutes(r.Group("/api"), studioModule)
-	movie.RegisterRoutes(r.Group("/api"), movieModule)
-	genre.RegisterRoutes(r.Group("/api"), genreModule)
-	schedule.RegisterRoutes(r.Group("/api"), scheduleModule)
-	promo.RegisterRoutes(r.Group("/api"), promoModule)
-	order.RegisterRoutes(r.Group("/api"), orderModule)
-	report.RegisterRoutes(r.Group("/api"), reportModule)
+
+	api := r.Group("/api")
+	{
+		iam.RegisterRoutes(api, iamModule)
+		studio.RegisterRoutes(api, studioModule)
+		movie.RegisterRoutes(api, movieModule)
+		genre.RegisterRoutes(api, genreModule)
+		schedule.RegisterRoutes(api, scheduleModule)
+		promo.RegisterRoutes(api, promoModule)
+		notification.RegisterRoutes(api, notificationModule)
+		order.RegisterRoutes(api, orderModule)
+		report.RegisterRoutes(api, reportModule)
+	}
 
 	// Run server
+	fmt.Printf("Server berjalan di port %s\n", port)
 	r.Run(":" + port)
 }
