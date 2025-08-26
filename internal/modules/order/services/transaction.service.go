@@ -2,9 +2,11 @@ package services
 
 import (
 	"fmt"
+	"log"
 	"movie-app-go/internal/constants"
 	"movie-app-go/internal/jobs"
 	"movie-app-go/internal/models"
+	notificationServices "movie-app-go/internal/modules/notification/services"
 	"movie-app-go/internal/modules/order/requests"
 	promoRequests "movie-app-go/internal/modules/promo/requests"
 	promoServices "movie-app-go/internal/modules/promo/services"
@@ -15,13 +17,14 @@ import (
 )
 
 type TransactionService struct {
-	DB           *gorm.DB
-	QueueService *jobs.QueueService
-	PromoService *promoServices.PromoService
+	DB                  *gorm.DB
+	QueueService        *jobs.QueueService
+	PromoService        *promoServices.PromoService
+	NotificationService *notificationServices.NotificationService
 }
 
 func NewTransactionService(db *gorm.DB, queueService *jobs.QueueService, promoService *promoServices.PromoService) *TransactionService {
-	return &TransactionService{DB: db, QueueService: queueService, PromoService: promoService}
+	return &TransactionService{DB: db, QueueService: queueService, PromoService: promoService, NotificationService: notificationServices.NewNotificationService(db)}
 }
 
 func (s *TransactionService) CreateTransaction(userID uint, req *requests.CreateTransactionRequest) (*models.Transaction, error) {
@@ -225,5 +228,39 @@ func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymen
 	if err != nil {
 		return nil, err
 	}
+
+	if req.PaymentStatus == constants.PaymentStatusSuccess {
+		var schedule models.Schedule
+		if err := s.DB.Preload("Movie").
+			Joins("JOIN tickets ON tickets.schedule_id = schedules.id").
+			Where("tickets.transaction_id = ?", id).
+			First(&schedule).Error; err != nil {
+			log.Printf("⚠️ Failed to get schedule for transaction %d: %v", id, err)
+		} else {
+			// ✅ CLEAN: Use notification service directly
+			go func() {
+				if err := s.NotificationService.CreateBookingConfirmationNotification(
+					transaction.UserID,
+					transaction.ID,
+					schedule.Movie.Title,
+					transaction.TotalAmount,
+				); err != nil {
+					log.Printf("Failed to create booking confirmation: %v", err)
+				}
+			}()
+
+			go func() {
+				if err := s.NotificationService.CreateMovieReminderNotification(
+					transaction.UserID,
+					schedule.Movie.Title,
+					schedule.StartTime.Format("2006-01-02 15:04:05"),
+					schedule.MovieID,
+				); err != nil {
+					log.Printf("Failed to create movie reminder: %v", err)
+				}
+			}()
+		}
+	}
+
 	return &transaction, nil
 }
