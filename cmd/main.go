@@ -68,6 +68,8 @@ func main() {
 	// Setup Gin
 	r := gin.Default()
 
+	r.Static("/uploads", "./uploads")
+
 	api := r.Group("/api")
 	{
 		iam.RegisterRoutes(api, iamModule)

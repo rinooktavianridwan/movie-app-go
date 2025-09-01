@@ -1,9 +1,12 @@
 package services
 
 import (
+	"mime/multipart"
 	"movie-app-go/internal/models"
 	"movie-app-go/internal/modules/movie/requests"
 	"movie-app-go/internal/repository"
+	"movie-app-go/internal/utils"
+	"strings"
 
 	"fmt"
 
@@ -18,7 +21,7 @@ func NewMovieService(db *gorm.DB) *MovieService {
 	return &MovieService{DB: db}
 }
 
-func (s *MovieService) CreateMovie(req *requests.CreateMovieRequest) (*models.Movie, error) {
+func (s *MovieService) CreateMovie(req *requests.CreateMovieRequest, posterFile *multipart.FileHeader) (*models.Movie, error) {
 	var movie models.Movie
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
 		var count int64
@@ -32,6 +35,14 @@ func (s *MovieService) CreateMovie(req *requests.CreateMovieRequest) (*models.Mo
 			Title:    req.Title,
 			Overview: req.Overview,
 			Duration: req.Duration,
+		}
+		if posterFile != nil {
+			posterPath, err := utils.SaveFile(posterFile, "uploads/posters", "image", 10)
+			if err != nil {
+				return err
+			}
+			relativePath := strings.TrimPrefix(posterPath, "./")
+			movie.PosterURL = &relativePath
 		}
 		if err := tx.Create(&movie).Error; err != nil {
 			return err
@@ -72,7 +83,7 @@ func (s *MovieService) GetMovieByID(id uint) (*models.Movie, error) {
 	return &movie, nil
 }
 
-func (s *MovieService) UpdateMovie(id uint, req *requests.UpdateMovieRequest) (*models.Movie, error) {
+func (s *MovieService) UpdateMovie(id uint, req *requests.UpdateMovieRequest, posterFile *multipart.FileHeader) (*models.Movie, error) {
 	var movie models.Movie
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
 		var count int64
@@ -88,6 +99,20 @@ func (s *MovieService) UpdateMovie(id uint, req *requests.UpdateMovieRequest) (*
 		movie.Title = req.Title
 		movie.Overview = req.Overview
 		movie.Duration = req.Duration
+
+		if posterFile != nil {
+			if movie.PosterURL != nil && *movie.PosterURL != "" {
+				utils.DeleteFile(*movie.PosterURL)
+			}
+
+			posterPath, err := utils.SaveFile(posterFile, "uploads/posters", "image", 10)
+			if err != nil {
+				return err
+			}
+			relativePath := strings.TrimPrefix(posterPath, "./")
+            movie.PosterURL = &relativePath
+		}
+
 		if err := tx.Save(&movie).Error; err != nil {
 			return err
 		}
@@ -119,12 +144,12 @@ func (s *MovieService) UpdateMovie(id uint, req *requests.UpdateMovieRequest) (*
 func (s *MovieService) DeleteMovie(id uint) error {
 	return s.DB.Transaction(func(tx *gorm.DB) error {
 		var movie models.Movie
-        if err := tx.First(&movie, id).Error; err != nil {
-            if err == gorm.ErrRecordNotFound {
-                return fmt.Errorf("movie not found")
-            }
-            return err
-        }
+		if err := tx.First(&movie, id).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return fmt.Errorf("movie not found")
+			}
+			return err
+		}
 		if err := tx.Where("movie_id = ?", id).Delete(&models.MovieGenre{}).Error; err != nil {
 			return err
 		}

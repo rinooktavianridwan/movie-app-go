@@ -1,0 +1,3 @@
+ALTER TABLE users DROP COLUMN IF EXISTS avatar;
+
+ALTER TABLE movies DROP COLUMN IF EXISTS poster_url;
