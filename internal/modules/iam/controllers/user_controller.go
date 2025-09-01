@@ -1,13 +1,14 @@
 package controllers
 
 import (
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"movie-app-go/internal/modules/iam/requests"
 	"movie-app-go/internal/modules/iam/responses"
 	"movie-app-go/internal/modules/iam/services"
 	"net/http"
 	"strconv"
+
+	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type UserController struct {
@@ -77,4 +78,29 @@ func (c *UserController) Delete(ctx *gin.Context) {
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"message": "User deleted"})
+}
+
+func (c *UserController) UploadAvatar(ctx *gin.Context) {
+	userID, exists := ctx.Get("user_id")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		return
+	}
+
+	file, err := ctx.FormFile("avatar")
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": "File avatar diperlukan"})
+		return
+	}
+	userIDFloat := uint(userID.(float64))
+	user, err := c.Service.UpdateAvatar(userIDFloat, file)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "Avatar berhasil diupload",
+		"user":    responses.ToUserResponse(user),
+	})
 }

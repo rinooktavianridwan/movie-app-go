@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"mime/multipart"
 	"net/http"
 	"strconv"
 
@@ -21,11 +22,16 @@ func NewMovieController(s *services.MovieService) *MovieController {
 
 func (c *MovieController) Create(ctx *gin.Context) {
 	var req requests.CreateMovieRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
+	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	movie, err := c.MovieService.CreateMovie(&req)
+	var posterFile *multipart.FileHeader
+	if file, err := ctx.FormFile("poster"); err == nil {
+		posterFile = file
+	}
+
+	movie, err := c.MovieService.CreateMovie(&req, posterFile)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -77,11 +83,15 @@ func (c *MovieController) Update(ctx *gin.Context) {
 		return
 	}
 	var req requests.UpdateMovieRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
+	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	movie, err := c.MovieService.UpdateMovie(uint(id), &req)
+	var posterFile *multipart.FileHeader
+	if file, err := ctx.FormFile("poster"); err == nil {
+		posterFile = file
+	}
+	movie, err := c.MovieService.UpdateMovie(uint(id), &req, posterFile)
 	if err != nil {
 		if err.Error() == "some genre_ids are invalid" {
 			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

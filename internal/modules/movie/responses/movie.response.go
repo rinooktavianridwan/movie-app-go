@@ -3,14 +3,17 @@ package responses
 import (
 	"movie-app-go/internal/models"
 	"movie-app-go/internal/modules/genre/responses"
+	"movie-app-go/internal/utils"
+	"os"
 )
 
 type MovieResponse struct {
-	ID       uint            `json:"id"`
-	Title    string          `json:"title"`
-	Overview string          `json:"overview"`
-	Duration uint            `json:"duration"`
-	Genres   []responses.GenreResponse `json:"genres"`
+	ID        uint                      `json:"id"`
+	Title     string                    `json:"title"`
+	Overview  string                    `json:"overview"`
+	Duration  uint                      `json:"duration"`
+	PosterUrl *string                   `json:"poster_url"`
+	Genres    []responses.GenreResponse `json:"genres"`
 }
 
 type PaginatedMovieResponse struct {
@@ -30,12 +33,22 @@ func ToMovieResponse(movie *models.Movie) MovieResponse {
 			Name: mg.Genre.Name,
 		}
 	}
+	var posterURL *string
+	if movie.PosterURL != nil && *movie.PosterURL != "" {
+		baseURL := os.Getenv("BASE_URL")
+		if baseURL == "" {
+			baseURL = "http://localhost:3000"
+		}
+		url := utils.GetFileURL(*movie.PosterURL, baseURL)
+		posterURL = &url
+	}
 	return MovieResponse{
-		ID:       movie.ID,
-		Title:    movie.Title,
-		Overview: movie.Overview,
-		Duration: movie.Duration,
-		Genres:   genres,
+		ID:        movie.ID,
+		Title:     movie.Title,
+		Overview:  movie.Overview,
+		Duration:  movie.Duration,
+		PosterUrl: posterURL,
+		Genres:    genres,
 	}
 }
 
