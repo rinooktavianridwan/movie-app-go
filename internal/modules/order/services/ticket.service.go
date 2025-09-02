@@ -1,10 +1,10 @@
 package services
 
 import (
-	"fmt"
 	"movie-app-go/internal/constants"
 	"movie-app-go/internal/models"
 	"movie-app-go/internal/repository"
+	"movie-app-go/internal/utils"
 
 	"gorm.io/gorm"
 )
@@ -72,7 +72,7 @@ func (s *TicketService) GetTicketsBySchedule(scheduleID uint, page, perPage int)
 	return repository.Paginate[models.Ticket](query, page, perPage)
 }
 
-func (s *TicketService) ScanTicket(id uint, userID *uint) (*models.Ticket, error) {
+func (s *TicketService) ScanTicket(id uint, userID *uint) error {
 	var ticket models.Ticket
 
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
@@ -92,15 +92,15 @@ func (s *TicketService) ScanTicket(id uint, userID *uint) (*models.Ticket, error
 
 		switch ticket.Status {
 		case constants.TicketStatusPending:
-			return fmt.Errorf("payment not confirmed")
+			return utils.ErrTicketNotPaid
 		case constants.TicketStatusCancelled:
-			return fmt.Errorf("cancelled ticket cannot be used")
+			return utils.ErrTicketCancelled
 		case constants.TicketStatusUsed:
-			return fmt.Errorf("ticket already used")
+			return utils.ErrTicketAlreadyScanned
 		case constants.TicketStatusActive:
 			break
 		default:
-			return fmt.Errorf("invalid ticket status")
+			return utils.ErrTicketNotFound
 		}
 
 		ticket.Status = constants.TicketStatusUsed
@@ -112,7 +112,7 @@ func (s *TicketService) ScanTicket(id uint, userID *uint) (*models.Ticket, error
 	})
 
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return &ticket, nil
+	return nil
 }

@@ -1,16 +1,16 @@
 package controllers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
 	"movie-app-go/internal/models"
 	"movie-app-go/internal/modules/order/responses"
 	"movie-app-go/internal/modules/order/services"
+	"movie-app-go/internal/utils"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type TicketController struct {
@@ -22,19 +22,14 @@ func NewTicketController(s *services.TicketService) *TicketController {
 }
 
 func (c *TicketController) GetMyTickets(ctx *gin.Context) {
-	userID, exists := ctx.Get("user_id")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
-		return
-	}
-
+	userID, _ := ctx.Get("user_id")
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	perPage, _ := strconv.Atoi(ctx.DefaultQuery("per_page", "10"))
 
 	userIDUint := uint(userID.(float64))
 	result, err := c.TicketService.GetTicketsByUser(userIDUint, page, perPage)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
@@ -47,7 +42,11 @@ func (c *TicketController) GetMyTickets(ctx *gin.Context) {
 		Data:      ticketResponses,
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"User tickets retrieved successfully",
+		response,
+	))
 }
 
 func (c *TicketController) GetAll(ctx *gin.Context) {
@@ -56,7 +55,7 @@ func (c *TicketController) GetAll(ctx *gin.Context) {
 
 	result, err := c.TicketService.GetAllTickets(page, perPage)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
@@ -69,22 +68,21 @@ func (c *TicketController) GetAll(ctx *gin.Context) {
 		Data:      ticketResponses,
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Tickets retrieved successfully",
+		response,
+	))
 }
 
 func (c *TicketController) GetByID(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("Invalid id"))
 		return
 	}
-	userID, exists := ctx.Get("user_id")
+	userID, _ := ctx.Get("user_id")
 	isAdmin, adminExists := ctx.Get("is_admin")
-
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
-		return
-	}
 
 	var ticket *models.Ticket
 	if adminExists && isAdmin.(bool) {
@@ -95,30 +93,36 @@ func (c *TicketController) GetByID(ctx *gin.Context) {
 	}
 
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "ticket not found"})
-		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		switch {
+		case errors.Is(err, utils.ErrTicketNotFound):
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		case errors.Is(err, utils.ErrUnauthorizedAccess):
+			ctx.JSON(http.StatusForbidden, utils.ErrorResponse(http.StatusForbidden, err.Error()))
+		default:
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		}
 		return
 	}
 
-	ctx.JSON(http.StatusOK, responses.ToTicketResponse(ticket))
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Ticket retrieved successfully",
+		responses.ToTicketResponse(ticket),
+	))
 }
 
 func (c *TicketController) GetBySchedule(ctx *gin.Context) {
-	scheduleID, err := strconv.Atoi(ctx.Param("schedule_id"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid schedule_id"})
-		return
-	}
-
+	scheduleID, _ := strconv.Atoi(ctx.Param("schedule_id"))
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	perPage, _ := strconv.Atoi(ctx.DefaultQuery("per_page", "50"))
 
 	result, err := c.TicketService.GetTicketsBySchedule(uint(scheduleID), page, perPage)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if errors.Is(err, utils.ErrScheduleNotFound) {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		} else {
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+		}
 		return
 	}
 
@@ -131,13 +135,17 @@ func (c *TicketController) GetBySchedule(ctx *gin.Context) {
 		Data:      ticketResponses,
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Schedule tickets retrieved successfully",
+		response,
+	))
 }
 
 func (c *TicketController) ScanTicket(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid ticket id"})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("Invalid id"))
 		return
 	}
 
@@ -145,42 +153,36 @@ func (c *TicketController) ScanTicket(ctx *gin.Context) {
 	isAdmin, adminExists := ctx.Get("is_admin")
 
 	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("User not authenticated"))
 		return
 	}
 
-	var ticket *models.Ticket
 	if adminExists && isAdmin.(bool) {
-		// Admin can scan any ticket
-		ticket, err = c.TicketService.ScanTicket(uint(id), nil)
+		err = c.TicketService.ScanTicket(uint(id), nil)
 	} else {
-		// User can only scan their own tickets
 		userIDUint := uint(userID.(float64))
-		ticket, err = c.TicketService.ScanTicket(uint(id), &userIDUint)
+		err = c.TicketService.ScanTicket(uint(id), &userIDUint)
 	}
 
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "ticket not found"})
-		} else if err.Error() == "ticket already used" {
-			ctx.JSON(http.StatusConflict, gin.H{"error": "ticket already scanned"})
-		} else if err.Error() == "cancelled ticket cannot be used" {
-			ctx.JSON(http.StatusForbidden, gin.H{"error": "ticket is cancelled"})
-		} else if err.Error() == "payment not confirmed" {
-			ctx.JSON(http.StatusPaymentRequired, gin.H{"error": "payment must be completed first"})
-		} else {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		switch {
+		case errors.Is(err, utils.ErrTicketNotFound):
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		case errors.Is(err, utils.ErrTicketAlreadyScanned):
+			ctx.JSON(http.StatusConflict, utils.ErrorResponse(http.StatusConflict, err.Error()))
+		case errors.Is(err, utils.ErrTicketNotPaid):
+			ctx.JSON(http.StatusPaymentRequired, utils.ErrorResponse(http.StatusPaymentRequired, err.Error()))
+		case errors.Is(err, utils.ErrUnauthorizedAccess):
+			ctx.JSON(http.StatusForbidden, utils.ErrorResponse(http.StatusForbidden, err.Error()))
+		default:
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		}
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":    "ticket scanned successfully",
-		"ticket_id":  ticket.ID,
-		"status":     ticket.Status,
-		"scanned_at": time.Now(),
-		"movie":      ticket.Schedule.Movie.Title,
-		"studio":     ticket.Schedule.Studio.Name,
-		"seat":       ticket.SeatNumber,
-	})
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Ticket scanned successfully",
+		nil,
+	))
 }

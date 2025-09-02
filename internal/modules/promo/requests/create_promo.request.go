@@ -2,8 +2,6 @@ package requests
 
 import (
 	"time"
-
-	"github.com/go-playground/validator/v10"
 )
 
 type CreatePromoRequest struct {
@@ -19,17 +17,4 @@ type CreatePromoRequest struct {
 	ValidFrom     time.Time `json:"valid_from" binding:"required"`
 	ValidUntil    time.Time `json:"valid_until" binding:"required"`
 	MovieIDs      []uint    `json:"movie_ids"`
-}
-
-func (r *CreatePromoRequest) Validate() error {
-	validate := validator.New()
-	if err := validate.Struct(r); err != nil {
-		return err
-	}
-
-	if !r.ValidUntil.After(r.ValidFrom) {
-		return validator.ValidationErrors{}
-	}
-
-	return nil
 }

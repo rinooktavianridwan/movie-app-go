@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -8,6 +9,7 @@ import (
 	"movie-app-go/internal/modules/promo/requests"
 	"movie-app-go/internal/modules/promo/responses"
 	"movie-app-go/internal/modules/promo/services"
+	"movie-app-go/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,49 +24,45 @@ func NewPromoController(promoService *services.PromoService) *PromoController {
 	}
 }
 
-func (c *PromoController) CreatePromo(ctx *gin.Context) {
+func (c *PromoController) Create(ctx *gin.Context) {
 	var req requests.CreatePromoRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
 
-	if err := req.Validate(); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "Validation failed"})
-		return
-	}
-
-	promo, err := c.PromoService.CreatePromo(&req)
+	err := c.PromoService.CreatePromo(&req)
 	if err != nil {
-		if err.Error() == "promo code already exists" {
-			ctx.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-		} else if err.Error() == "some movie_ids are invalid" {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		if errors.Is(err, utils.ErrPromoNotFound) {
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		}
 		return
 	}
 
-	promoResponse := responses.ToPromoResponse(*promo)
-	ctx.JSON(http.StatusCreated, promoResponse)
+	ctx.JSON(http.StatusCreated, utils.SuccessResponse(
+		http.StatusCreated,
+		"Promo created successfully",
+		nil,
+	))
 }
 
 func (c *PromoController) GetAllPromos(ctx *gin.Context) {
 	opts, err := options.ParsePromoOptions(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
 
 	result, err := c.PromoService.GetAllPromosPaginated(opts)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
 	promoResponses := responses.ToPromoResponses(result.Data)
-	paginatedResponse := responses.PaginatedPromoResponse{
+	response := responses.PaginatedPromoResponse{
 		Page:      result.Page,
 		PerPage:   result.PerPage,
 		Total:     result.Total,
@@ -72,95 +70,101 @@ func (c *PromoController) GetAllPromos(ctx *gin.Context) {
 		Data:      promoResponses,
 	}
 
-	ctx.JSON(http.StatusOK, paginatedResponse)
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Promos retrieved successfully",
+		response,
+	))
 }
 
 func (c *PromoController) GetPromoByID(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+	id, _ := strconv.Atoi(ctx.Param("id"))
 
 	promo, err := c.PromoService.GetPromoByID(uint(id))
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "promo not found"})
-		return
-	}
-
-	promoResponse := responses.ToPromoResponse(*promo)
-	ctx.JSON(http.StatusOK, promoResponse)
-}
-
-func (c *PromoController) UpdatePromo(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
-
-	var req requests.UpdatePromoRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	if err := req.Validate(); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "validation failed"})
-		return
-	}
-
-	promo, err := c.PromoService.UpdatePromo(uint(id), &req)
-	if err != nil {
-		if err.Error() == "promo not found" {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		} else if err.Error() == "some movie_ids are invalid" {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		if errors.Is(err, utils.ErrPromoNotFound) {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
 		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		}
 		return
 	}
 
-	promoResponse := responses.ToPromoResponse(*promo)
-	ctx.JSON(http.StatusOK, promoResponse)
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Promo retrieved successfully",
+		responses.ToPromoResponse(*promo),
+	))
+}
+
+func (c *PromoController) Update(ctx *gin.Context) {
+	id, _ := strconv.Atoi(ctx.Param("id"))
+	var req requests.UpdatePromoRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		return
+	}
+
+	err := c.PromoService.UpdatePromo(uint(id), &req)
+	if err != nil {
+		switch {
+		case errors.Is(err, utils.ErrPromoNotFound):
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		default:
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+		}
+		return
+	}
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Promo updated successfully",
+		nil,
+	))
 }
 
 func (c *PromoController) TogglePromoStatus(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("Invalid ID"))
 		return
 	}
 
 	promo, err := c.PromoService.TogglePromoStatus(uint(id))
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "promo not found"})
-		return
+		if errors.Is(err, utils.ErrPromoNotFound) {
+            ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+        } else {
+            ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+        }
+        return
 	}
 
-	promoResponse := responses.ToPromoResponse(*promo)
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "promo status updated successfully",
-		"promo":   promoResponse,
-	})
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+        http.StatusOK,
+        "Promo status updated successfully",
+        responses.ToPromoResponse(*promo),
+    ))
 }
 
-func (c *PromoController) DeletePromo(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+func (c *PromoController) Delete(ctx *gin.Context) {
+	id, _ := strconv.Atoi(ctx.Param("id"))
 
 	if err := c.PromoService.DeletePromo(uint(id)); err != nil {
-		if err.Error() == "promo not found" {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		}
-		return
+		switch {
+        case errors.Is(err, utils.ErrPromoNotFound):
+            ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+        case errors.Is(err, utils.ErrPromoInUse):
+            ctx.JSON(http.StatusConflict, utils.ErrorResponse(http.StatusConflict, err.Error()))
+        default:
+            ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+        }
+        return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "promo deleted successfully"})
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+        http.StatusOK,
+        "Promo deleted successfully",
+        nil,
+    ))
 }

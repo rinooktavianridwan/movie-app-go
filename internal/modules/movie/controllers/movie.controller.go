@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"errors"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -8,8 +9,10 @@ import (
 	"movie-app-go/internal/modules/movie/requests"
 	"movie-app-go/internal/modules/movie/responses"
 	"movie-app-go/internal/modules/movie/services"
+	"movie-app-go/internal/utils"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type MovieController struct {
@@ -23,20 +26,31 @@ func NewMovieController(s *services.MovieService) *MovieController {
 func (c *MovieController) Create(ctx *gin.Context) {
 	var req requests.CreateMovieRequest
 	if err := ctx.ShouldBind(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
+
 	var posterFile *multipart.FileHeader
 	if file, err := ctx.FormFile("poster"); err == nil {
 		posterFile = file
 	}
 
-	movie, err := c.MovieService.CreateMovie(&req, posterFile)
+	err := c.MovieService.CreateMovie(&req, posterFile)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		switch {
+		case errors.Is(err, utils.ErrInvalidGenreIDs):
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		default:
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+		}
 		return
 	}
-	ctx.JSON(http.StatusCreated, responses.ToMovieResponse(movie))
+
+	ctx.JSON(http.StatusCreated, utils.SuccessResponse(
+		http.StatusCreated,
+		"Movie created successfully",
+		nil,
+	))
 }
 
 func (c *MovieController) GetAll(ctx *gin.Context) {
@@ -45,13 +59,12 @@ func (c *MovieController) GetAll(ctx *gin.Context) {
 
 	result, err := c.MovieService.GetAllMoviesPaginated(page, perPage)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
-	// Mapping ke response
 	movieResponses := responses.ToMovieResponses(result.Data)
-	paginatedResponse := responses.PaginatedMovieResponse{
+	response := responses.PaginatedMovieResponse{
 		Page:      result.Page,
 		PerPage:   result.PerPage,
 		Total:     result.Total,
@@ -59,61 +72,83 @@ func (c *MovieController) GetAll(ctx *gin.Context) {
 		Data:      movieResponses,
 	}
 
-	ctx.JSON(http.StatusOK, paginatedResponse)
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Movies retrieved successfully",
+		response,
+	))
 }
 
 func (c *MovieController) GetByID(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+	id, _ := strconv.Atoi(ctx.Param("id"))
 	movie, err := c.MovieService.GetMovieByID(uint(id))
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "movie not found"})
+		if err == gorm.ErrRecordNotFound {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse("Movie not found"))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusOK, responses.ToMovieResponse(movie))
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Movie retrieved successfully",
+		responses.ToMovieResponse(movie),
+	))
 }
 
 func (c *MovieController) Update(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+	id, _ := strconv.Atoi(ctx.Param("id"))
 	var req requests.UpdateMovieRequest
 	if err := ctx.ShouldBind(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
+
 	var posterFile *multipart.FileHeader
 	if file, err := ctx.FormFile("poster"); err == nil {
 		posterFile = file
 	}
-	movie, err := c.MovieService.UpdateMovie(uint(id), &req, posterFile)
+
+	err := c.MovieService.UpdateMovie(uint(id), &req, posterFile)
 	if err != nil {
-		if err.Error() == "some genre_ids are invalid" {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		} else if err.Error() == "movie not found" {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		switch {
+		case errors.Is(err, utils.ErrMovieNotFound):
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		case errors.Is(err, utils.ErrInvalidGenreIDs):
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		default:
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		}
 		return
 	}
-	ctx.JSON(http.StatusOK, responses.ToMovieResponse(movie))
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Movie updated successfully",
+		nil,
+	))
 }
 
 func (c *MovieController) Delete(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
+	id, _ := strconv.Atoi(ctx.Param("id"))
+	err := c.MovieService.DeleteMovie(uint(id))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		switch {
+		case errors.Is(err, utils.ErrMovieNotFound):
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		case errors.Is(err, utils.ErrMovieHasSchedules):
+			ctx.JSON(http.StatusConflict, utils.ErrorResponse(http.StatusConflict, err.Error()))
+		default:
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+		}
 		return
 	}
-	if err := c.MovieService.DeleteMovie(uint(id)); err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "movie not found"})
-		return
-	}
-	ctx.JSON(http.StatusOK, gin.H{"message": "movie deleted"})
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Movie deleted successfully",
+		nil,
+	))
 }

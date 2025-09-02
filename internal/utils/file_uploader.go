@@ -27,14 +27,14 @@ func SaveFile(file *multipart.FileHeader, destinationDir, fileType string, maxSi
 			}
 		}
 		if !isAllowed {
-			return "", fmt.Errorf("tipe file tidak diizinkan: %s", contentType)
+			return "", ErrInvalidFileType
 		}
 	} else {
-		return "", fmt.Errorf("tipe file tidak valid: %s", fileType)
+		return "", ErrInvalidFileType
 	}
 
 	if file.Size > maxSizeMB*1024*1024 {
-		return "", fmt.Errorf("ukuran file melebihi batas maksimum %dMB", maxSizeMB)
+		return "", ErrFileSizeExceeded
 	}
 
 	if _, err := os.Stat(destinationDir); os.IsNotExist(err) {

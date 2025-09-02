@@ -1,14 +1,15 @@
 package controllers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
 	"movie-app-go/internal/models"
 	"movie-app-go/internal/modules/order/requests"
 	"movie-app-go/internal/modules/order/responses"
 	"movie-app-go/internal/modules/order/services"
+	"movie-app-go/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -23,54 +24,48 @@ func NewTransactionController(s *services.TransactionService) *TransactionContro
 }
 
 func (c *TransactionController) Create(ctx *gin.Context) {
-	userID, exists := ctx.Get("user_id")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
-		return
-	}
+	userID, _ := ctx.Get("user_id")
 
 	var req requests.CreateTransactionRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
 
 	userIDUint := uint(userID.(float64))
-	transaction, err := c.TransactionService.CreateTransaction(userIDUint, &req)
+	err := c.TransactionService.CreateTransaction(userIDUint, &req)
 	if err != nil {
-		if err.Error() == "schedule not found" {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		} else if err.Error() == "some seats are already booked" ||
-			err.Error() == "seat numbers exceed studio capacity" {
-			ctx.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		switch {
+		case errors.Is(err, utils.ErrScheduleNotFound):
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		case errors.Is(err, utils.ErrInsufficientSeats):
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		case errors.Is(err, utils.ErrSeatAlreadyBooked):
+			ctx.JSON(http.StatusConflict, utils.ErrorResponse(http.StatusConflict, err.Error()))
+		case errors.Is(err, utils.ErrPromoNotFound):
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		default:
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		}
 		return
 	}
 
-	ctx.JSON(http.StatusCreated, gin.H{
-		"message":        "transaction created successfully",
-		"transaction_id": transaction.ID,
-		"total_amount":   transaction.TotalAmount,
-		"payment_status": transaction.PaymentStatus,
-	})
+	ctx.JSON(http.StatusCreated, utils.SuccessResponse(
+		http.StatusCreated,
+		"Transaction created successfully",
+		nil,
+	))
 }
 
 func (c *TransactionController) GetMyTransactions(ctx *gin.Context) {
-	userID, exists := ctx.Get("user_id")
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
-		return
-	}
-
+	userID, _ := ctx.Get("user_id")
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	perPage, _ := strconv.Atoi(ctx.DefaultQuery("per_page", "10"))
 
 	userIDUint := uint(userID.(float64))
 	result, err := c.TransactionService.GetTransactionsByUser(userIDUint, page, perPage)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
@@ -83,7 +78,11 @@ func (c *TransactionController) GetMyTransactions(ctx *gin.Context) {
 		Data:      transactionResponses,
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"User transactions retrieved successfully",
+		response,
+	))
 }
 
 func (c *TransactionController) GetAll(ctx *gin.Context) {
@@ -92,7 +91,7 @@ func (c *TransactionController) GetAll(ctx *gin.Context) {
 
 	result, err := c.TransactionService.GetAllTransactions(page, perPage)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
@@ -105,13 +104,17 @@ func (c *TransactionController) GetAll(ctx *gin.Context) {
 		Data:      transactionResponses,
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Transactions retrieved successfully",
+		response,
+	))
 }
 
 func (c *TransactionController) GetByID(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("invalid id"))
 		return
 	}
 
@@ -119,7 +122,7 @@ func (c *TransactionController) GetByID(ctx *gin.Context) {
 	isAdmin, adminExists := ctx.Get("is_admin")
 
 	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("unauthenticated"))
 		return
 	}
 
@@ -133,45 +136,53 @@ func (c *TransactionController) GetByID(ctx *gin.Context) {
 
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "transaction not found"})
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse("transaction not found"))
 		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		}
 		return
 	}
 
-	ctx.JSON(http.StatusOK, responses.ToTransactionResponse(transaction))
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Transaction retrieved successfully",
+		responses.ToTransactionResponse(transaction),
+	))
 }
 
 func (c *TransactionController) ProcessPayment(ctx *gin.Context) {
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid transaction id"})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("invalid transaction id"))
 		return
 	}
 
 	var req requests.ProcessPaymentRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("invalid request payload"))
 		return
 	}
 
-	transaction, err := c.TransactionService.ProcessPayment(uint(id), &req)
+	err = c.TransactionService.ProcessPayment(uint(id), &req)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "transaction not found"})
-		} else if err.Error() == "transaction status can only be updated from pending" {
-			ctx.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-		} else {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		switch {
+		case errors.Is(err, utils.ErrTransactionNotFound):
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		case errors.Is(err, utils.ErrTransactionAlreadyPaid):
+			ctx.JSON(http.StatusConflict, utils.ErrorResponse(http.StatusConflict, err.Error()))
+		case errors.Is(err, utils.ErrTransactionExpired):
+			ctx.JSON(http.StatusGone, utils.ErrorResponse(http.StatusGone, err.Error()))
+		case errors.Is(err, utils.ErrPaymentProcessingFailed):
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		default:
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		}
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":        "payment processed successfully",
-		"transaction_id": transaction.ID,
-		"payment_status": transaction.PaymentStatus,
-		"processed_at":   time.Now(),
-	})
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Payment processed successfully",
+		nil,
+	))
 }
