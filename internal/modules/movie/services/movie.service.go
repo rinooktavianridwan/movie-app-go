@@ -157,6 +157,10 @@ func (s *MovieService) DeleteMovie(id uint) error {
 			return utils.ErrMovieHasSchedules
 		}
 
+		if err := tx.Where("movie_id = ?", id).Delete(&models.MovieGenre{}).Error; err != nil {
+            return err
+        }
+
 		if movie.PosterURL != nil && *movie.PosterURL != "" {
 			utils.DeleteFile(*movie.PosterURL)
 		}

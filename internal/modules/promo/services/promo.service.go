@@ -60,6 +60,7 @@ func (s *PromoService) CreatePromo(req *requests.CreatePromoRequest) error {
 		if err := tx.Create(&promo).Error; err != nil {
 			return err
 		}
+		createdPromo = &promo
 
 		if len(req.MovieIDs) > 0 {
 			promoMovies := make([]models.PromoMovie, len(req.MovieIDs))

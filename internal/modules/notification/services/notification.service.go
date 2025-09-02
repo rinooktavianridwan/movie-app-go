@@ -93,40 +93,40 @@ func (s *NotificationService) GetNotificationByID(id uint) (*models.Notification
 	return &notification, nil
 }
 
-func (s *NotificationService) MarkAsRead(id uint, userID uint) (*models.Notification, error) {
+func (s *NotificationService) MarkAsRead(id uint, userID uint) error {
 	var notification models.Notification
 
 	if err := s.DB.Where("id = ? AND user_id = ?", id, userID).First(&notification).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, utils.ErrNotificationNotFound
+			return utils.ErrNotificationNotFound
 		}
-		return nil, err
+		return err
 	}
 
 	notification.IsRead = true
 	if err := s.DB.Save(&notification).Error; err != nil {
-		return nil, err
+		return err
 	}
 
-	return &notification, nil
+	return nil
 }
 
-func (s *NotificationService) MarkAsUnread(id uint, userID uint) (*models.Notification, error) {
+func (s *NotificationService) MarkAsUnread(id uint, userID uint) error {
 	var notification models.Notification
 
 	if err := s.DB.Where("id = ? AND user_id = ?", id, userID).First(&notification).Error; err != nil {
-		return nil, fmt.Errorf("notification not found")
+		return utils.ErrNotificationNotFound
 	}
 
 	notification.IsRead = false
 	if err := s.DB.Save(&notification).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, utils.ErrNotificationNotFound
+			return utils.ErrNotificationNotFound
 		}
-		return nil, err
+		return err
 	}
 
-	return &notification, nil
+	return nil
 }
 
 func (s *NotificationService) BulkMarkAsRead(req *requests.BulkMarkReadRequest, userID uint) error {

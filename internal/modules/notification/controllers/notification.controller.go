@@ -128,7 +128,7 @@ func (c *NotificationController) MarkAsRead(ctx *gin.Context) {
 		return
 	}
 
-	notification, err := c.NotificationService.MarkAsRead(uint(id), userID)
+	err = c.NotificationService.MarkAsRead(uint(id), userID)
 	if err != nil {
 		if errors.Is(err, utils.ErrNotificationNotFound) {
 			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
@@ -141,7 +141,7 @@ func (c *NotificationController) MarkAsRead(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, utils.SuccessResponse(
 		http.StatusOK,
 		"Notification marked as read successfully",
-		responses.ToNotificationResponse(*notification),
+		nil,
 	))
 }
 
@@ -158,7 +158,7 @@ func (c *NotificationController) MarkAsUnread(ctx *gin.Context) {
 		return
 	}
 
-	notification, err := c.NotificationService.MarkAsUnread(uint(id), userID)
+	err = c.NotificationService.MarkAsUnread(uint(id), userID)
 	if err != nil {
 		if errors.Is(err, utils.ErrNotificationNotFound) {
 			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
@@ -171,7 +171,7 @@ func (c *NotificationController) MarkAsUnread(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, utils.SuccessResponse(
 		http.StatusOK,
 		"Notification marked as unread successfully",
-		responses.ToNotificationResponse(*notification),
+		nil,
 	))
 }
 

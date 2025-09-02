@@ -62,12 +62,12 @@ func (s *StudioService) GetAllStudiosPaginated(page, perPage int) (repository.Pa
 
 func (s *StudioService) GetStudioByID(id uint) (*models.Studio, error) {
 	var studio models.Studio
-	if err := s.DB.Preload("Facilities").First(&studio, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return nil, utils.ErrStudioNotFound
-		}
-		return nil, err
-	}
+	if err := s.DB.Preload("FacilityStudios.Facility").First(&studio, id).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            return nil, utils.ErrStudioNotFound
+        }
+        return nil, err
+    }
 	return &studio, nil
 }
 
@@ -130,6 +130,10 @@ func (s *StudioService) DeleteStudio(id uint) error {
         }
         if scheduleCount > 0 {
             return utils.ErrStudioHasSchedules
+        }
+
+		if err := tx.Where("studio_id = ?", id).Delete(&models.FacilityStudio{}).Error; err != nil {
+            return err
         }
 
 		if err := tx.Delete(&models.Studio{}, id).Error; err != nil {
