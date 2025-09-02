@@ -3,7 +3,7 @@ package services
 import (
 	"fmt"
 	"log"
-	"movie-app-go/internal/constants"
+	"movie-app-go/internal/enums"
 	"movie-app-go/internal/jobs"
 	"movie-app-go/internal/models"
 	notificationServices "movie-app-go/internal/modules/notification/services"
@@ -47,7 +47,7 @@ func (s *TransactionService) CreateTransaction(userID uint, req *requests.Create
 		var existingTickets int64
 		if err := tx.Model(&models.Ticket{}).
 			Where("schedule_id = ? AND seat_number IN ? AND status != ?",
-				req.ScheduleID, req.SeatNumbers, constants.TicketStatusCancelled).
+				req.ScheduleID, req.SeatNumbers, enums.TicketStatusCancelled).
 			Count(&existingTickets).Error; err != nil {
 			return err
 		}
@@ -94,7 +94,7 @@ func (s *TransactionService) CreateTransaction(userID uint, req *requests.Create
 			OriginalAmount: &originalAmount,
 			DiscountAmount: discountAmount,
 			PaymentMethod:  req.PaymentMethod,
-			PaymentStatus:  constants.PaymentStatusPending,
+			PaymentStatus:  enums.PaymentStatusPending,
 			PromoID:        promoID,
 		}
 
@@ -125,7 +125,7 @@ func (s *TransactionService) CreateTransaction(userID uint, req *requests.Create
 				TransactionID: transaction.ID,
 				ScheduleID:    req.ScheduleID,
 				SeatNumber:    seatNum,
-				Status:        constants.TicketStatusPending,
+				Status:        enums.TicketStatusPending,
 				Price:         schedule.Price,
 			})
 		}
@@ -200,7 +200,7 @@ func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymen
 			return err
 		}
 
-		if transaction.PaymentStatus != constants.PaymentStatusPending {
+		if transaction.PaymentStatus != enums.PaymentStatusPending {
 			return fmt.Errorf("transaction already failed or timed out")
 		}
 
@@ -209,16 +209,16 @@ func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymen
 			return err
 		}
 
-		if req.PaymentStatus == constants.PaymentStatusSuccess {
+		if req.PaymentStatus == enums.PaymentStatusSuccess {
 			if err := tx.Model(&models.Ticket{}).
 				Where("transaction_id = ?", id).
-				Update("status", constants.TicketStatusActive).Error; err != nil {
+				Update("status", enums.TicketStatusActive).Error; err != nil {
 				return err
 			}
-		} else if req.PaymentStatus == constants.PaymentStatusFailed {
+		} else if req.PaymentStatus == enums.PaymentStatusFailed {
 			if err := tx.Model(&models.Ticket{}).
 				Where("transaction_id = ?", id).
-				Update("status", constants.TicketStatusCancelled).Error; err != nil {
+				Update("status", enums.TicketStatusCancelled).Error; err != nil {
 				return err
 			}
 		}
@@ -230,7 +230,7 @@ func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymen
 		return err
 	}
 
-	if req.PaymentStatus == constants.PaymentStatusSuccess {
+	if req.PaymentStatus == enums.PaymentStatusSuccess {
 		var schedule models.Schedule
 		if err := s.DB.Preload("Movie").
 			Joins("JOIN tickets ON tickets.schedule_id = schedules.id").

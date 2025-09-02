@@ -1,4 +1,4 @@
-package constants
+package enums
 
 const (
 	TicketStatusPending   = "pending"

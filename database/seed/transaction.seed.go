@@ -2,7 +2,7 @@ package seed
 
 import (
 	"log"
-	"movie-app-go/internal/constants"
+	"movie-app-go/internal/enums"
 	"movie-app-go/internal/models"
 	"time"
 
@@ -50,7 +50,7 @@ func SeedTransactions(db *gorm.DB) ([]models.Transaction, error) {
 				DiscountAmount: 0,
 				TotalAmount:    225000,
 				PaymentMethod:  "credit_card",
-				PaymentStatus:  constants.PaymentStatusSuccess,
+				PaymentStatus:  enums.PaymentStatusSuccess,
 				PromoID:        nil,
 			},
 			CreatedAt: time.Date(2025, 8, 20, 15, 30, 0, 0, time.UTC),
@@ -63,7 +63,7 @@ func SeedTransactions(db *gorm.DB) ([]models.Transaction, error) {
 				DiscountAmount: 0,
 				TotalAmount:    150000,
 				PaymentMethod:  "e_wallet",
-				PaymentStatus:  constants.PaymentStatusSuccess,
+				PaymentStatus:  enums.PaymentStatusSuccess,
 				PromoID:        nil,
 			},
 			CreatedAt: time.Date(2025, 8, 21, 10, 15, 0, 0, time.UTC),
@@ -77,7 +77,7 @@ func SeedTransactions(db *gorm.DB) ([]models.Transaction, error) {
 				DiscountAmount: 45000,
 				TotalAmount:    180000,
 				PaymentMethod:  "credit_card",
-				PaymentStatus:  constants.PaymentStatusSuccess,
+				PaymentStatus:  enums.PaymentStatusSuccess,
 				PromoID:        getPromoID("WEEKEND20"),
 			},
 			CreatedAt: time.Date(2025, 8, 25, 14, 30, 0, 0, time.UTC),
@@ -90,7 +90,7 @@ func SeedTransactions(db *gorm.DB) ([]models.Transaction, error) {
 				DiscountAmount: 25000,
 				TotalAmount:    125000,
 				PaymentMethod:  "e_wallet",
-				PaymentStatus:  constants.PaymentStatusSuccess,
+				PaymentStatus:  enums.PaymentStatusSuccess,
 				PromoID:        getPromoID("FIRST25K"),
 			},
 			CreatedAt: time.Date(2025, 9, 5, 16, 20, 0, 0, time.UTC),

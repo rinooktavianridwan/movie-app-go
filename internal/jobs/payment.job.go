@@ -5,7 +5,7 @@ import (
     "encoding/json"
     "fmt"
     "log"
-    "movie-app-go/internal/constants"
+    "movie-app-go/internal/enums"
     "movie-app-go/internal/models"
 
     "github.com/hibiken/asynq"
@@ -42,19 +42,19 @@ func (h *PaymentJobHandler) HandlePaymentTimeout(ctx context.Context, t *asynq.T
             return err
         }
 
-        if transaction.PaymentStatus != constants.PaymentStatusPending {
+        if transaction.PaymentStatus != enums.PaymentStatusPending {
             log.Printf("Transaction %d status is %s, skipping", payload.TransactionID, transaction.PaymentStatus)
             return nil
         }
 
-        transaction.PaymentStatus = constants.PaymentStatusFailed
+        transaction.PaymentStatus = enums.PaymentStatusFailed
         if err := tx.Save(&transaction).Error; err != nil {
             return err
         }
         
         if err := tx.Model(&models.Ticket{}).
             Where("transaction_id = ?", payload.TransactionID).
-            Update("status", constants.TicketStatusCancelled).Error; err != nil {
+            Update("status", enums.TicketStatusCancelled).Error; err != nil {
             return err
         }
 
