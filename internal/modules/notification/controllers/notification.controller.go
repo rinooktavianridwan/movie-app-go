@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	"movie-app-go/internal/modules/notification/requests"
 	"movie-app-go/internal/modules/notification/responses"
 	"movie-app-go/internal/modules/notification/services"
+	"movie-app-go/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -46,24 +48,24 @@ func (c *NotificationController) getUserID(ctx *gin.Context) (uint, error) {
 func (c *NotificationController) GetUserNotifications(ctx *gin.Context) {
 	userID, err := c.getUserID(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		ctx.JSON(http.StatusUnauthorized, utils.ErrorResponse(http.StatusUnauthorized, err.Error()))
 		return
 	}
 
 	opts, err := options.ParseNotificationOptions(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
 
 	result, err := c.NotificationService.GetUserNotifications(userID, opts)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
 	notificationResponses := responses.ToNotificationResponses(result.Data)
-	paginatedResponse := responses.PaginatedNotificationResponse{
+	response := responses.PaginatedNotificationResponse{
 		Page:      result.Page,
 		PerPage:   result.PerPage,
 		Total:     result.Total,
@@ -71,218 +73,260 @@ func (c *NotificationController) GetUserNotifications(ctx *gin.Context) {
 		Data:      notificationResponses,
 	}
 
-	ctx.JSON(http.StatusOK, paginatedResponse)
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"User notifications retrieved successfully",
+		response,
+	))
 }
 
 func (c *NotificationController) GetNotificationByID(ctx *gin.Context) {
 	userID, err := c.getUserID(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		ctx.JSON(http.StatusUnauthorized, utils.ErrorResponse(http.StatusUnauthorized, err.Error()))
 		return
 	}
 
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid notification ID"})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("Invalid notification ID"))
 		return
 	}
 
 	notification, err := c.NotificationService.GetNotificationByID(uint(id))
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "notification not found"})
+		if errors.Is(err, utils.ErrNotificationNotFound) {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		} else {
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+		}
 		return
 	}
 
 	if notification.UserID != userID {
-		ctx.JSON(http.StatusForbidden, gin.H{"error": "access denied"})
+		ctx.JSON(http.StatusForbidden, utils.ErrorResponse(http.StatusForbidden, "Access denied to this notification"))
 		return
 	}
 
-	notificationResponse := responses.ToNotificationResponse(*notification)
-	ctx.JSON(http.StatusOK, notificationResponse)
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Notification retrieved successfully",
+		responses.ToNotificationResponse(*notification),
+	))
 }
 
 func (c *NotificationController) MarkAsRead(ctx *gin.Context) {
 	userID, err := c.getUserID(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		ctx.JSON(http.StatusUnauthorized, utils.ErrorResponse(http.StatusUnauthorized, err.Error()))
 		return
 	}
 
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid notification ID"})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("Invalid notification ID"))
 		return
 	}
 
-	notification, err := c.NotificationService.MarkAsRead(uint(id), userID)
+	err = c.NotificationService.MarkAsRead(uint(id), userID)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		if errors.Is(err, utils.ErrNotificationNotFound) {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		} else {
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+		}
 		return
 	}
 
-	notificationResponse := responses.ToNotificationResponse(*notification)
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":      "notification marked as read",
-		"notification": notificationResponse,
-	})
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Notification marked as read successfully",
+		nil,
+	))
 }
 
 func (c *NotificationController) MarkAsUnread(ctx *gin.Context) {
 	userID, err := c.getUserID(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		ctx.JSON(http.StatusUnauthorized, utils.ErrorResponse(http.StatusUnauthorized, err.Error()))
 		return
 	}
 
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid notification ID"})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("Invalid notification ID"))
 		return
 	}
 
-	notification, err := c.NotificationService.MarkAsUnread(uint(id), userID)
+	err = c.NotificationService.MarkAsUnread(uint(id), userID)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		if errors.Is(err, utils.ErrNotificationNotFound) {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		} else {
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+		}
 		return
 	}
 
-	notificationResponse := responses.ToNotificationResponse(*notification)
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":      "notification marked as unread",
-		"notification": notificationResponse,
-	})
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Notification marked as unread successfully",
+		nil,
+	))
 }
 
 func (c *NotificationController) BulkMarkAsRead(ctx *gin.Context) {
 	userID, err := c.getUserID(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		ctx.JSON(http.StatusUnauthorized, utils.ErrorResponse(http.StatusUnauthorized, err.Error()))
 		return
 	}
 
 	var req requests.BulkMarkReadRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
 
 	if err := c.NotificationService.BulkMarkAsRead(&req, userID); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "notifications marked as read"})
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Notifications marked as read successfully",
+		nil,
+	))
 }
 
 func (c *NotificationController) MarkAllAsRead(ctx *gin.Context) {
 	userID, err := c.getUserID(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		ctx.JSON(http.StatusUnauthorized, utils.ErrorResponse(http.StatusUnauthorized, err.Error()))
 		return
 	}
 
 	if err := c.NotificationService.MarkAllAsRead(userID); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "all notifications marked as read"})
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"All notifications marked as read successfully",
+		nil,
+	))
 }
 
 func (c *NotificationController) GetNotificationStats(ctx *gin.Context) {
 	userID, err := c.getUserID(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		ctx.JSON(http.StatusUnauthorized, utils.ErrorResponse(http.StatusUnauthorized, err.Error()))
 		return
 	}
 
 	stats, err := c.NotificationService.GetNotificationStats(userID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, stats)
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Notification statistics retrieved successfully",
+		stats,
+	))
 }
 
 func (c *NotificationController) DeleteNotification(ctx *gin.Context) {
 	userID, err := c.getUserID(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "user not authenticated"})
+		ctx.JSON(http.StatusUnauthorized, utils.ErrorResponse(http.StatusUnauthorized, err.Error()))
 		return
 	}
 
 	id, err := strconv.Atoi(ctx.Param("id"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid notification ID"})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("Invalid notification ID"))
 		return
 	}
 
 	if err := c.NotificationService.DeleteNotification(uint(id), userID); err != nil {
-		if err.Error() == "notification not found" {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		}
-		return
+		if errors.Is(err, utils.ErrNotificationNotFound) {
+            ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+        } else {
+            ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+        }
+        return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "notification deleted successfully"})
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+        http.StatusOK,
+        "Notification deleted successfully",
+        nil,
+    ))
 }
 
 func (c *NotificationController) CreateNotification(ctx *gin.Context) {
 	var req requests.CreateNotificationRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
 
-	notification, err := c.NotificationService.CreateNotification(&req)
+	err := c.NotificationService.CreateNotification(&req)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
-	notificationResponse := responses.ToNotificationResponse(*notification)
-	ctx.JSON(http.StatusCreated, notificationResponse)
+	ctx.JSON(http.StatusCreated, utils.SuccessResponse(
+        http.StatusCreated,
+        "Notification created successfully",
+        nil,
+    ))
 }
 
 func (c *NotificationController) CreateSystemNotification(ctx *gin.Context) {
 	var req requests.CreateSystemNotificationRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
 
 	var userIDs []uint
-	if err := c.NotificationService.DB.Model(&models.User{}).
-		Where("is_admin = ?", false).
-		Pluck("id", &userIDs).Error; err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "failed to get users"})
-		return
-	}
+	err := c.NotificationService.DB.Model(&models.User{}).
+        Where("is_admin = ?", false).
+        Pluck("id", &userIDs).Error
+    if err != nil {
+        ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse("Failed to get users"))
+        return
+    }
 
 	if len(userIDs) == 0 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "no users found"})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("No users found"))
 		return
 	}
 
-	err := c.NotificationService.CreateBulkNotifications(
+	err = c.NotificationService.CreateBulkNotifications(
 		userIDs,
 		req.Title,
 		req.Message,
 		constants.NotificationTypeSystem,
 		req.Data,
 	)
-
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
-	ctx.JSON(http.StatusCreated, gin.H{
-		"message":    fmt.Sprintf("system notification sent to %d users", len(userIDs)),
-		"user_count": len(userIDs),
-	})
+	ctx.JSON(http.StatusCreated, utils.SuccessResponse(
+        http.StatusCreated,
+        "System notification sent successfully",
+        map[string]interface{}{
+            "user_count": len(userIDs),
+            "message":    fmt.Sprintf("System notification sent to %d users", len(userIDs)),
+        },
+    ))
 }

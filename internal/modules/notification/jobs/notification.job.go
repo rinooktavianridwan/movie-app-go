@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"time"
 
 	"movie-app-go/internal/constants"
 	"movie-app-go/internal/models"
@@ -145,83 +144,4 @@ func (h *NotificationJobHandler) HandleBookingConfirmation(ctx context.Context, 
 
 	log.Printf("Booking confirmation notification sent to user %d", payload.UserID)
 	return nil
-}
-
-func (h *NotificationJobHandler) ScheduleMovieReminder(userID uint, movieID uint, movieTitle string, scheduleTime time.Time, scheduleID uint) error {
-	payload := MovieReminderPayload{
-		UserID:       userID,
-		MovieID:      movieID,
-		MovieTitle:   movieTitle,
-		ScheduleTime: scheduleTime.Format("2006-01-02 15:04:05"),
-		ScheduleID:   scheduleID,
-	}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	reminderTime := scheduleTime.Add(-time.Hour)
-	log.Printf("Scheduled movie reminder for user %d at %v (payload: %s)", userID, reminderTime, string(payloadBytes))
-
-	return nil
-}
-
-func (h *NotificationJobHandler) SchedulePromoNotification(userIDs []uint, promoID uint, promoName string, promoCode string, movieIDs []uint, scheduleTime time.Time) error {
-	payload := PromoNotificationPayload{
-		UserIDs:   userIDs,
-		PromoID:   promoID,
-		PromoName: promoName,
-		PromoCode: promoCode,
-		MovieIDs:  movieIDs,
-	}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("Scheduled promo notification for %d users at %v (payload: %s)", len(userIDs), scheduleTime, string(payloadBytes))
-
-	return nil
-}
-
-func (h *NotificationJobHandler) SendBookingConfirmation(userID uint, transactionID uint, movieTitle string, totalAmount float64, scheduleTime string) error {
-	payload := BookingConfirmationPayload{
-		UserID:        userID,
-		TransactionID: transactionID,
-		MovieTitle:    movieTitle,
-		TotalAmount:   totalAmount,
-		ScheduleTime:  scheduleTime,
-	}
-
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
-
-	log.Printf("Queued booking confirmation for user %d, transaction %d (payload: %s)", userID, transactionID, string(payloadBytes))
-
-	return nil
-}
-
-func (h *NotificationJobHandler) GetActiveUsersForPromoNotification(movieIDs []uint) ([]uint, error) {
-	var userIDs []uint
-
-	query := h.DB.Model(&models.User{}).
-		Where("is_admin = ?", false).
-		Select("id")
-
-	if len(movieIDs) > 0 {
-		query = query.Joins("JOIN transactions ON transactions.user_id = users.id").
-			Joins("JOIN schedules ON schedules.id = transactions.schedule_id").
-			Where("schedules.movie_id IN ?", movieIDs).
-			Distinct()
-	}
-
-	if err := query.Pluck("id", &userIDs).Error; err != nil {
-		return nil, err
-	}
-
-	return userIDs, nil
 }

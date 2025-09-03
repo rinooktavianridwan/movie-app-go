@@ -1,13 +1,16 @@
 package controllers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
-	"github.com/gin-gonic/gin"
 	"movie-app-go/internal/modules/studio/requests"
 	"movie-app-go/internal/modules/studio/responses"
 	"movie-app-go/internal/modules/studio/services"
+	"movie-app-go/internal/utils"
+
+	"github.com/gin-gonic/gin"
 )
 
 type FacilityController struct {
@@ -21,15 +24,20 @@ func NewFacilityController(s *services.FacilityService) *FacilityController {
 func (c *FacilityController) Create(ctx *gin.Context) {
 	var req requests.CreateFacilityRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
-	facility, err := c.FacilityService.CreateFacility(&req)
+
+	err := c.FacilityService.CreateFacility(&req)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusCreated, responses.FacilityResponse{ID: facility.ID, Name: facility.Name})
+	ctx.JSON(http.StatusCreated, utils.SuccessResponse(
+		http.StatusCreated,
+		"Facility created successfully",
+		nil,
+	))
 }
 
 func (c *FacilityController) GetAll(ctx *gin.Context) {
@@ -38,63 +46,84 @@ func (c *FacilityController) GetAll(ctx *gin.Context) {
 
 	result, err := c.FacilityService.GetAllFacilitiesPaginated(page, perPage)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
 	resp := responses.ToFacilityResponses(result.Data)
-    response := responses.PaginatedFacilityResponse{
-        Page:      result.Page,
-        PerPage:   result.PerPage,
-        Total:     result.Total,
-        TotalPage: result.TotalPages,
-        Data:      resp,
-    }
-    ctx.JSON(http.StatusOK, response)
+	response := responses.PaginatedFacilityResponse{
+		Page:      result.Page,
+		PerPage:   result.PerPage,
+		Total:     result.Total,
+		TotalPage: result.TotalPages,
+		Data:      resp,
+	}
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Facilities retrieved successfully",
+		response,
+	))
 }
 
 func (c *FacilityController) GetByID(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+	id, _ := strconv.Atoi(ctx.Param("id"))
 	facility, err := c.FacilityService.GetFacilityByID(uint(id))
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "facility not found"})
+		if errors.Is(err, utils.ErrFacilityNotFound) {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		} else {
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+		}
 		return
 	}
-	ctx.JSON(http.StatusOK, responses.FacilityResponse{ID: facility.ID, Name: facility.Name})
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Facility retrieved successfully",
+		responses.ToFacilityResponse(facility),
+	))
 }
 
 func (c *FacilityController) Update(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+	id, _ := strconv.Atoi(ctx.Param("id"))
 	var req requests.UpdateFacilityRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
-	facility, err := c.FacilityService.UpdateFacility(uint(id), &req)
+	err := c.FacilityService.UpdateFacility(uint(id), &req)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "facility not found"})
+		if errors.Is(err, utils.ErrFacilityNotFound) {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		} else {
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+		}
 		return
 	}
-	ctx.JSON(http.StatusOK, responses.FacilityResponse{ID: facility.ID, Name: facility.Name})
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Facility updated successfully",
+		nil,
+	))
 }
 
 func (c *FacilityController) Delete(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
+	id, _ := strconv.Atoi(ctx.Param("id"))
+	err := c.FacilityService.DeleteFacility(uint(id))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		if errors.Is(err, utils.ErrFacilityNotFound) {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		} else {
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+		}
 		return
 	}
-	if err := c.FacilityService.DeleteFacility(uint(id)); err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "facility not found"})
-		return
-	}
-	ctx.JSON(http.StatusOK, gin.H{"message": "facility deleted"})
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Facility deleted successfully",
+		nil,
+	))
 }

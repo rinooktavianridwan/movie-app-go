@@ -10,6 +10,7 @@ import (
 	"movie-app-go/internal/modules/promo/requests"
 	"movie-app-go/internal/modules/promo/responses"
 	"movie-app-go/internal/repository"
+	"movie-app-go/internal/utils"
 	"time"
 
 	"gorm.io/gorm"
@@ -24,21 +25,21 @@ func NewPromoService(db *gorm.DB) *PromoService {
 	return &PromoService{DB: db, NotificationService: notificationServices.NewNotificationService(db)}
 }
 
-func (s *PromoService) CreatePromo(req *requests.CreatePromoRequest) (*models.Promo, error) {
+func (s *PromoService) CreatePromo(req *requests.CreatePromoRequest) error {
 	var existingPromo models.Promo
 	if err := s.DB.Where("code = ?", req.Code).First(&existingPromo).Error; err == nil {
-		return nil, fmt.Errorf("promo code already exists")
+		return utils.ErrPromoCodeExists
 	}
 
 	var createdPromo *models.Promo
-	err := s.DB.Transaction(func(tx *gorm.DB) error {
+	return s.DB.Transaction(func(tx *gorm.DB) error {
 		if len(req.MovieIDs) > 0 {
-			var count int64
-			if err := tx.Model(&models.Movie{}).Where("id IN ?", req.MovieIDs).Count(&count).Error; err != nil {
+			var movieCount int64
+			if err := tx.Model(&models.Movie{}).Where("id IN ?", req.MovieIDs).Count(&movieCount).Error; err != nil {
 				return err
 			}
-			if count != int64(len(req.MovieIDs)) {
-				return fmt.Errorf("some movie_ids are invalid")
+			if movieCount != int64(len(req.MovieIDs)) {
+				return utils.ErrInvalidMovieIDs
 			}
 		}
 
@@ -59,6 +60,7 @@ func (s *PromoService) CreatePromo(req *requests.CreatePromoRequest) (*models.Pr
 		if err := tx.Create(&promo).Error; err != nil {
 			return err
 		}
+		createdPromo = &promo
 
 		if len(req.MovieIDs) > 0 {
 			promoMovies := make([]models.PromoMovie, len(req.MovieIDs))
@@ -73,19 +75,13 @@ func (s *PromoService) CreatePromo(req *requests.CreatePromoRequest) (*models.Pr
 			}
 		}
 
+		if createdPromo.IsActive {
+			s.sendPromoNotificationAsync(createdPromo.ID, createdPromo.Name, createdPromo.Code)
+		}
+
 		createdPromo = &promo
 		return nil
 	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	if createdPromo.IsActive {
-		s.sendPromoNotificationAsync(createdPromo.ID, createdPromo.Name, createdPromo.Code)
-	}
-
-	return createdPromo, nil
 }
 
 func (s *PromoService) GetAllPromosPaginated(opts options.PromoOptions) (repository.PaginationResult[models.Promo], error) {
@@ -121,27 +117,19 @@ func (s *PromoService) GetAllPromosPaginated(opts options.PromoOptions) (reposit
 func (s *PromoService) GetPromoByID(id uint) (*models.Promo, error) {
 	var promo models.Promo
 	if err := s.DB.Preload("PromoMovies.Movie").First(&promo, id).Error; err != nil {
-		return nil, fmt.Errorf("promo not found")
+		return nil, utils.ErrPromoNotFound
 	}
 	return &promo, nil
 }
 
-func (s *PromoService) GetPromoByCode(code string) (*models.Promo, error) {
-	var promo models.Promo
-	if err := s.DB.Preload("PromoMovies").Where("code = ?", code).First(&promo).Error; err != nil {
-		return nil, fmt.Errorf("promo not found")
-	}
-	return &promo, nil
-}
-
-func (s *PromoService) UpdatePromo(id uint, req *requests.UpdatePromoRequest) (*models.Promo, error) {
+func (s *PromoService) UpdatePromo(id uint, req *requests.UpdatePromoRequest) error {
 	var updatedPromo *models.Promo
 	var wasInactive bool
 
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
 		var promo models.Promo
 		if err := tx.First(&promo, id).Error; err != nil {
-			return fmt.Errorf("promo not found")
+			return utils.ErrPromoNotFound
 		}
 
 		wasInactive = !promo.IsActive
@@ -152,7 +140,7 @@ func (s *PromoService) UpdatePromo(id uint, req *requests.UpdatePromoRequest) (*
 				return err
 			}
 			if count != int64(len(req.MovieIDs)) {
-				return fmt.Errorf("some movie_ids are invalid")
+				return utils.ErrInvalidMovieIDs
 			}
 		}
 
@@ -215,20 +203,20 @@ func (s *PromoService) UpdatePromo(id uint, req *requests.UpdatePromoRequest) (*
 	})
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if wasInactive && updatedPromo.IsActive {
 		s.sendPromoNotificationAsync(updatedPromo.ID, updatedPromo.Name, updatedPromo.Code)
 	}
 
-	return updatedPromo, nil
+	return nil
 }
 
 func (s *PromoService) TogglePromoStatus(id uint) (*models.Promo, error) {
 	var promo models.Promo
 	if err := s.DB.First(&promo, id).Error; err != nil {
-		return nil, fmt.Errorf("promo not found")
+		return nil, utils.ErrPromoNotFound
 	}
 
 	wasInactive := !promo.IsActive
@@ -245,20 +233,25 @@ func (s *PromoService) TogglePromoStatus(id uint) (*models.Promo, error) {
 }
 
 func (s *PromoService) DeletePromo(id uint) error {
-	var promo models.Promo
-	if err := s.DB.First(&promo, id).Error; err != nil {
-		return fmt.Errorf("promo not found")
-	}
-
 	return s.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("promo_id = ?", id).Delete(&models.PromoMovie{}).Error; err != nil {
+		if err := tx.First(&models.Promo{}, id).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return utils.ErrPromoNotFound
+			}
 			return err
 		}
 
-		if err := tx.Delete(&promo).Error; err != nil {
+		var usageCount int64
+		if err := tx.Model(&models.Transaction{}).Where("promo_id = ?", id).Count(&usageCount).Error; err != nil {
 			return err
 		}
+		if usageCount > 0 {
+			return utils.ErrPromoInUse
+		}
 
+		if err := tx.Delete(&models.Promo{}, id).Error; err != nil {
+			return err
+		}
 		return nil
 	})
 }
@@ -340,6 +333,14 @@ func (s *PromoService) ValidatePromo(userID uint, req *requests.ValidatePromoReq
 		FinalAmount:    finalAmount,
 		Message:        "Promo applied successfully",
 	}, nil
+}
+
+func (s *PromoService) GetPromoByCode(code string) (*models.Promo, error) {
+	var promo models.Promo
+	if err := s.DB.Preload("PromoMovies").Where("code = ?", code).First(&promo).Error; err != nil {
+		return nil, utils.ErrPromoNotFound
+	}
+	return &promo, nil
 }
 
 func (s *PromoService) sendPromoNotificationAsync(promoID uint, promoName, promoCode string) {

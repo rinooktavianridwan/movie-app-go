@@ -11,6 +11,7 @@ import (
 	promoRequests "movie-app-go/internal/modules/promo/requests"
 	promoServices "movie-app-go/internal/modules/promo/services"
 	"movie-app-go/internal/repository"
+	"movie-app-go/internal/utils"
 	"time"
 
 	"gorm.io/gorm"
@@ -27,14 +28,14 @@ func NewTransactionService(db *gorm.DB, queueService *jobs.QueueService, promoSe
 	return &TransactionService{DB: db, QueueService: queueService, PromoService: promoService, NotificationService: notificationServices.NewNotificationService(db)}
 }
 
-func (s *TransactionService) CreateTransaction(userID uint, req *requests.CreateTransactionRequest) (*models.Transaction, error) {
+func (s *TransactionService) CreateTransaction(userID uint, req *requests.CreateTransactionRequest) error {
 	var transaction *models.Transaction
 
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
 		var schedule models.Schedule
 		if err := tx.Preload("Movie").Preload("Studio").First(&schedule, req.ScheduleID).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
-				return fmt.Errorf("schedule not found")
+				return utils.ErrScheduleNotFound
 			}
 			return err
 		}
@@ -137,14 +138,14 @@ func (s *TransactionService) CreateTransaction(userID uint, req *requests.Create
 	})
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if err := s.QueueService.SchedulePaymentTimeout(transaction.ID, 2*time.Minute); err != nil {
 		fmt.Printf("Failed to schedule payment timeout job: %v\n", err)
 	}
 
-	return transaction, nil
+	return nil
 }
 
 func (s *TransactionService) GetTransactionsByUser(userID uint, page, perPage int) (repository.PaginationResult[models.Transaction], error) {
@@ -191,7 +192,7 @@ func (s *TransactionService) GetTransactionByID(id uint, userID *uint) (*models.
 	return &transaction, nil
 }
 
-func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymentRequest) (*models.Transaction, error) {
+func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymentRequest) error {
 	var transaction models.Transaction
 
 	err := s.DB.Transaction(func(tx *gorm.DB) error {
@@ -226,7 +227,7 @@ func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymen
 	})
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if req.PaymentStatus == constants.PaymentStatusSuccess {
@@ -235,9 +236,8 @@ func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymen
 			Joins("JOIN tickets ON tickets.schedule_id = schedules.id").
 			Where("tickets.transaction_id = ?", id).
 			First(&schedule).Error; err != nil {
-			log.Printf("⚠️ Failed to get schedule for transaction %d: %v", id, err)
+			log.Printf("Failed to get schedule for transaction %d: %v", id, err)
 		} else {
-			// ✅ CLEAN: Use notification service directly
 			go func() {
 				if err := s.NotificationService.CreateBookingConfirmationNotification(
 					transaction.UserID,
@@ -262,5 +262,5 @@ func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymen
 		}
 	}
 
-	return &transaction, nil
+	return nil
 }

@@ -1,7 +1,6 @@
 package services
 
 import (
-	"fmt"
 	"mime/multipart"
 	"movie-app-go/internal/models"
 	"movie-app-go/internal/modules/iam/requests"
@@ -35,10 +34,13 @@ func (s *UserService) GetByID(id uint) (*models.User, error) {
 	return &user, nil
 }
 
-func (s *UserService) Update(id uint, req *requests.UserUpdateRequest) (*models.User, error) {
+func (s *UserService) Update(id uint, req *requests.UserUpdateRequest) error {
 	var user models.User
 	if err := s.DB.First(&user, id).Error; err != nil {
-		return nil, err
+		if err == gorm.ErrRecordNotFound {
+			return utils.ErrUserNotFound
+		}
+		return err
 	}
 
 	user.Name = req.Name
@@ -46,7 +48,7 @@ func (s *UserService) Update(id uint, req *requests.UserUpdateRequest) (*models.
 	if req.Password != "" {
 		hashed, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		user.Password = string(hashed)
 	}
@@ -55,22 +57,32 @@ func (s *UserService) Update(id uint, req *requests.UserUpdateRequest) (*models.
 	}
 
 	if err := s.DB.Save(&user).Error; err != nil {
-		return nil, err
+		return err
 	}
-	return &user, nil
+	return nil
 }
 
 func (s *UserService) Delete(id uint) error {
+	if err := s.DB.First(&models.User{}, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return utils.ErrUserNotFound
+		}
+		return err
+	}
+
 	if err := s.DB.Delete(&models.User{}, id).Error; err != nil {
 		return err
 	}
 	return nil
 }
 
-func (s *UserService) UpdateAvatar(userID uint, file *multipart.FileHeader) (*models.User, error) {
+func (s *UserService) UpdateAvatar(userID uint, file *multipart.FileHeader) error {
 	var user models.User
 	if err := s.DB.First(&user, userID).Error; err != nil {
-		return nil, fmt.Errorf("user tidak ditemukan")
+		if err == gorm.ErrRecordNotFound {
+			return utils.ErrUserNotFound
+		}
+		return err
 	}
 
 	if user.Avatar != nil && *user.Avatar != "" {
@@ -79,7 +91,7 @@ func (s *UserService) UpdateAvatar(userID uint, file *multipart.FileHeader) (*mo
 
 	avatarPath, err := utils.SaveFile(file, "uploads/avatars", "image", 5)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	relativePath := strings.TrimPrefix(avatarPath, "./")
@@ -87,8 +99,8 @@ func (s *UserService) UpdateAvatar(userID uint, file *multipart.FileHeader) (*mo
 
 	if err := s.DB.Save(&user).Error; err != nil {
 		utils.DeleteFile(avatarPath)
-		return nil, err
+		return err
 	}
 
-	return &user, nil
+	return nil
 }

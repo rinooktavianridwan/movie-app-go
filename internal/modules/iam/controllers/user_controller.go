@@ -1,9 +1,11 @@
 package controllers
 
 import (
+	"errors"
 	"movie-app-go/internal/modules/iam/requests"
 	"movie-app-go/internal/modules/iam/responses"
 	"movie-app-go/internal/modules/iam/services"
+	"movie-app-go/internal/utils"
 	"net/http"
 	"strconv"
 
@@ -25,7 +27,7 @@ func (c *UserController) GetAll(ctx *gin.Context) {
 
 	result, err := c.Service.GetAllPaginated(page, perPage)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
@@ -38,69 +40,99 @@ func (c *UserController) GetAll(ctx *gin.Context) {
 		Data:      resp,
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Users retrieved successfully",
+		response,
+	))
 }
 
 func (c *UserController) GetByID(ctx *gin.Context) {
 	id, _ := strconv.Atoi(ctx.Param("id"))
 	user, err := c.Service.GetByID(uint(id))
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		if err == gorm.ErrRecordNotFound {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse("User not found"))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusOK, responses.ToUserResponse(user))
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"User retrieved successfully",
+		responses.ToUserResponse(user),
+	))
 }
 
 func (c *UserController) Update(ctx *gin.Context) {
 	var req requests.UserUpdateRequest
+	id, _ := strconv.Atoi(ctx.Param("id"))
+
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
 
-	id, _ := strconv.Atoi(ctx.Param("id"))
-	user, err := c.Service.Update(uint(id), &req)
+	err := c.Service.Update(uint(id), &req)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		if errors.Is(err, utils.ErrUserNotFound) {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
 		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		}
 		return
 	}
-	ctx.JSON(http.StatusOK, responses.ToUserResponse(user))
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"User updated successfully",
+		nil,
+	))
 }
 
 func (c *UserController) Delete(ctx *gin.Context) {
 	id, _ := strconv.Atoi(ctx.Param("id"))
 	if err := c.Service.Delete(uint(id)); err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		if err == gorm.ErrRecordNotFound {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse("User not found"))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"message": "User deleted"})
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"User deleted successfully",
+		nil,
+	))
 }
 
 func (c *UserController) UploadAvatar(ctx *gin.Context) {
 	userID, exists := ctx.Get("user_id")
 	if !exists {
-		ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+		ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Unauthorized"))
 		return
 	}
 
 	file, err := ctx.FormFile("avatar")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "File avatar diperlukan"})
-		return
-	}
-	userIDFloat := uint(userID.(float64))
-	user, err := c.Service.UpdateAvatar(userIDFloat, file)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("File avatar diperlukan"))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "Avatar berhasil diupload",
-		"user":    responses.ToUserResponse(user),
-	})
+	userIDFloat := uint(userID.(float64))
+	err = c.Service.UpdateAvatar(userIDFloat, file)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Avatar berhasil diupload",
+		nil,
+	))
 }

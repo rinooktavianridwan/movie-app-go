@@ -9,6 +9,7 @@ import (
 	"movie-app-go/internal/modules/notification/requests"
 	"movie-app-go/internal/modules/notification/responses"
 	"movie-app-go/internal/repository"
+	"movie-app-go/internal/utils"
 
 	"gorm.io/gorm"
 )
@@ -23,7 +24,7 @@ func NewNotificationService(db *gorm.DB) *NotificationService {
 	}
 }
 
-func (s *NotificationService) CreateNotification(req *requests.CreateNotificationRequest) (*models.Notification, error) {
+func (s *NotificationService) CreateNotification(req *requests.CreateNotificationRequest) error {
 	notification := models.Notification{
 		UserID:  req.UserID,
 		Title:   req.Title,
@@ -34,10 +35,10 @@ func (s *NotificationService) CreateNotification(req *requests.CreateNotificatio
 	}
 
 	if err := s.DB.Create(&notification).Error; err != nil {
-		return nil, err
+		return err
 	}
 
-	return &notification, nil
+	return nil
 }
 
 func (s *NotificationService) GetUserNotifications(userID uint, opts options.NotificationOptions) (repository.PaginationResult[models.Notification], error) {
@@ -84,39 +85,48 @@ func (s *NotificationService) GetUserNotifications(userID uint, opts options.Not
 func (s *NotificationService) GetNotificationByID(id uint) (*models.Notification, error) {
 	var notification models.Notification
 	if err := s.DB.First(&notification, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, utils.ErrNotificationNotFound
+		}
 		return nil, err
 	}
 	return &notification, nil
 }
 
-func (s *NotificationService) MarkAsRead(id uint, userID uint) (*models.Notification, error) {
+func (s *NotificationService) MarkAsRead(id uint, userID uint) error {
 	var notification models.Notification
 
 	if err := s.DB.Where("id = ? AND user_id = ?", id, userID).First(&notification).Error; err != nil {
-		return nil, fmt.Errorf("notification not found")
+		if err == gorm.ErrRecordNotFound {
+			return utils.ErrNotificationNotFound
+		}
+		return err
 	}
 
 	notification.IsRead = true
 	if err := s.DB.Save(&notification).Error; err != nil {
-		return nil, err
+		return err
 	}
 
-	return &notification, nil
+	return nil
 }
 
-func (s *NotificationService) MarkAsUnread(id uint, userID uint) (*models.Notification, error) {
+func (s *NotificationService) MarkAsUnread(id uint, userID uint) error {
 	var notification models.Notification
 
 	if err := s.DB.Where("id = ? AND user_id = ?", id, userID).First(&notification).Error; err != nil {
-		return nil, fmt.Errorf("notification not found")
+		return utils.ErrNotificationNotFound
 	}
 
 	notification.IsRead = false
 	if err := s.DB.Save(&notification).Error; err != nil {
-		return nil, err
+		if err == gorm.ErrRecordNotFound {
+			return utils.ErrNotificationNotFound
+		}
+		return err
 	}
 
-	return &notification, nil
+	return nil
 }
 
 func (s *NotificationService) BulkMarkAsRead(req *requests.BulkMarkReadRequest, userID uint) error {
@@ -133,7 +143,7 @@ func (s *NotificationService) BulkMarkAsRead(req *requests.BulkMarkReadRequest, 
 	}
 
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("no notifications found to update")
+		return utils.ErrNotificationNotFound
 	}
 
 	return nil
@@ -173,9 +183,8 @@ func (s *NotificationService) DeleteNotification(id uint, userID uint) error {
 	if result.Error != nil {
 		return result.Error
 	}
-
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("notification not found")
+		return utils.ErrNotificationNotFound
 	}
 
 	return nil
@@ -194,35 +203,34 @@ func (s *NotificationService) CreateMovieReminderNotification(userID uint, movie
 		},
 	}
 
-	_, err := s.CreateNotification(req)
+	err := s.CreateNotification(req)
 	return err
 }
 
 func (s *NotificationService) CreatePromoNotification(promoID uint, promoName, promoCode string) error {
-    var userIDs []uint
-    if err := s.DB.Model(&models.User{}).
-        Where("is_admin = ?", false).
-        Pluck("id", &userIDs).Error; err != nil {
-        log.Printf("Failed to get users for promo notification: %v", err)
-        return err
-    }
+	var userIDs []uint
+	if err := s.DB.Model(&models.User{}).
+		Where("is_admin = ?", false).
+		Pluck("id", &userIDs).Error; err != nil {
+		log.Printf("Failed to get users for promo notification: %v", err)
+		return err
+	}
 
-    if len(userIDs) == 0 {
-        log.Printf("No users found for promo notification")
-        return fmt.Errorf("no users found")
-    }
+	if len(userIDs) == 0 {
+		return utils.ErrUserNotFound
+	}
 
-    return s.CreateBulkNotifications(
-        userIDs,
-        "New Promo Available!",
-        fmt.Sprintf("Check out our new promo: %s. Use code: %s", promoName, promoCode),
-        constants.NotificationTypePromoAvailable,
-        map[string]interface{}{
-            "promo_id":   promoID,
-            "promo_name": promoName,
-            "promo_code": promoCode,
-        },
-    )
+	return s.CreateBulkNotifications(
+		userIDs,
+		"New Promo Available!",
+		fmt.Sprintf("Check out our new promo: %s. Use code: %s", promoName, promoCode),
+		constants.NotificationTypePromoAvailable,
+		map[string]interface{}{
+			"promo_id":   promoID,
+			"promo_name": promoName,
+			"promo_code": promoCode,
+		},
+	)
 }
 
 func (s *NotificationService) CreateBookingConfirmationNotification(
@@ -243,7 +251,7 @@ func (s *NotificationService) CreateBookingConfirmationNotification(
 		},
 	}
 
-	_, err := s.CreateNotification(req)
+	err := s.CreateNotification(req)
 	return err
 }
 
@@ -255,7 +263,7 @@ func (s *NotificationService) CreateBulkNotifications(
 	data map[string]interface{},
 ) error {
 	if len(userIDs) == 0 {
-		return fmt.Errorf("no user IDs provided")
+		return utils.ErrUserNotFound
 	}
 
 	notifications := make([]models.Notification, len(userIDs))

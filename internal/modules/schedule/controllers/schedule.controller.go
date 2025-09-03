@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -8,9 +9,9 @@ import (
 	"movie-app-go/internal/modules/schedule/requests"
 	"movie-app-go/internal/modules/schedule/responses"
 	"movie-app-go/internal/modules/schedule/services"
+	"movie-app-go/internal/utils"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
 type ScheduleController struct {
@@ -24,37 +25,46 @@ func NewScheduleController(s *services.ScheduleService) *ScheduleController {
 func (c *ScheduleController) Create(ctx *gin.Context) {
 	var req requests.CreateScheduleRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
-	schedule, err := c.ScheduleService.CreateSchedule(&req)
+
+	err := c.ScheduleService.CreateSchedule(&req)
 	if err != nil {
-		if err.Error() == "movie not found" || err.Error() == "studio not found" {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		} else if err.Error() == "start_time must be before end_time" ||
-			err.Error() == "date cannot be in the past" ||
-			err.Error() == "schedule conflict: studio is already booked at this time" {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		switch {
+		case errors.Is(err, utils.ErrInvalidMovieIDs):
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		case errors.Is(err, utils.ErrStudioNotFound):
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		case errors.Is(err, utils.ErrScheduleConflict):
+			ctx.JSON(http.StatusConflict, utils.ErrorResponse(http.StatusConflict, err.Error()))
+		case errors.Is(err, utils.ErrInvalidTimeRange):
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		case errors.Is(err, utils.ErrPastDate):
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		default:
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		}
 		return
 	}
-	ctx.JSON(http.StatusCreated, responses.ToScheduleResponse(schedule))
+
+	ctx.JSON(http.StatusCreated, utils.SuccessResponse(
+		http.StatusCreated,
+		"Schedule created successfully",
+		nil,
+	))
 }
 
 func (c *ScheduleController) GetAll(ctx *gin.Context) {
-	// Parse options dari query parameters
 	opts, err := options.ParseScheduleOptions(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
 
-	// Panggil service dengan options struct
 	result, err := c.ScheduleService.GetAllSchedulesPaginated(opts)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
@@ -67,71 +77,83 @@ func (c *ScheduleController) GetAll(ctx *gin.Context) {
 		Data:      scheduleResponses,
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Schedules retrieved successfully",
+		response,
+	))
 }
 
 func (c *ScheduleController) GetByID(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+	id, _ := strconv.Atoi(ctx.Param("id"))
 	schedule, err := c.ScheduleService.GetScheduleByID(uint(id))
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "schedule not found"})
+		if errors.Is(err, utils.ErrScheduleNotFound) {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
 		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		}
 		return
 	}
-	ctx.JSON(http.StatusOK, responses.ToScheduleResponse(schedule))
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Schedule retrieved successfully",
+		responses.ToScheduleResponse(schedule),
+	))
 }
 
 func (c *ScheduleController) Update(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+	id, _ := strconv.Atoi(ctx.Param("id"))
 	var req requests.UpdateScheduleRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
-	schedule, err := c.ScheduleService.UpdateSchedule(uint(id), &req)
+
+	err := c.ScheduleService.UpdateSchedule(uint(id), &req)
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": "schedule not found"})
-		} else if err.Error() == "movie not found" || err.Error() == "studio not found" {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		} else if err.Error() == "start_time must be before end_time" ||
-			err.Error() == "date cannot be in the past" ||
-			err.Error() == "schedule conflict: studio is already booked at this time" {
-			ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		switch {
+		case errors.Is(err, utils.ErrScheduleNotFound):
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		case errors.Is(err, utils.ErrInvalidMovieIDs):
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		case errors.Is(err, utils.ErrStudioNotFound):
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		case errors.Is(err, utils.ErrScheduleConflict):
+			ctx.JSON(http.StatusConflict, utils.ErrorResponse(http.StatusConflict, err.Error()))
+		case errors.Is(err, utils.ErrInvalidTimeRange):
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		case errors.Is(err, utils.ErrPastDate):
+			ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		default:
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		}
 		return
 	}
-	ctx.JSON(http.StatusOK, responses.ToScheduleResponse(schedule))
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Schedule updated successfully",
+		nil,
+	))
 }
 
 func (c *ScheduleController) Delete(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
+	id, _ := strconv.Atoi(ctx.Param("id"))
+	err := c.ScheduleService.DeleteSchedule(uint(id))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
-	if err := c.ScheduleService.DeleteSchedule(uint(id)); err != nil {
-		if err.Error() == "schedule not found" {
-			ctx.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-		} else if err.Error() == "cannot delete schedule: tickets already exist" {
-			ctx.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		if errors.Is(err, utils.ErrScheduleNotFound) {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
 		} else {
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		}
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"message": "schedule deleted"})
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Schedule deleted successfully",
+		nil,
+	))
 }

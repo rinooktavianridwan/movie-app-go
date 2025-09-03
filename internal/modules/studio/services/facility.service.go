@@ -3,7 +3,9 @@ package services
 import (
 	"movie-app-go/internal/models"
 	"movie-app-go/internal/modules/studio/requests"
-    "movie-app-go/internal/repository"
+	"movie-app-go/internal/repository"
+	"movie-app-go/internal/utils"
+
 	"gorm.io/gorm"
 )
 
@@ -15,41 +17,55 @@ func NewFacilityService(db *gorm.DB) *FacilityService {
 	return &FacilityService{DB: db}
 }
 
-func (s *FacilityService) CreateFacility(req *requests.CreateFacilityRequest) (*models.Facility, error){
+func (s *FacilityService) CreateFacility(req *requests.CreateFacilityRequest) error {
 	facility := models.Facility{Name: req.Name}
 	if err := s.DB.Create(&facility).Error; err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *FacilityService) GetAllFacilitiesPaginated(page, perPage int) (repository.PaginationResult[models.Facility], error) {
+	return repository.Paginate[models.Facility](s.DB, page, perPage)
+}
+
+func (s *FacilityService) GetFacilityByID(id uint) (*models.Facility, error) {
+	var facility models.Facility
+	if err := s.DB.First(&facility, id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, utils.ErrFacilityNotFound
+		}
 		return nil, err
 	}
 	return &facility, nil
 }
 
-func (s *FacilityService) GetAllFacilitiesPaginated(page, perPage int) (repository.PaginationResult[models.Facility], error) {
-    return repository.Paginate[models.Facility](s.DB, page, perPage)
-}
+func (s *FacilityService) UpdateFacility(id uint, req *requests.UpdateFacilityRequest) error {
+	var facility models.Facility
+	if err := s.DB.First(&facility, id).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            return utils.ErrFacilityNotFound
+        }
+        return err
+    }
 
-func (s *FacilityService) GetFacilityByID(id uint) (*models.Facility, error) {
-    var facility models.Facility
-    if err := s.DB.First(&facility, id).Error; err != nil {
-        return nil, err
-    }
-    return &facility, nil
-}
-
-func (s *FacilityService) UpdateFacility(id uint, req *requests.UpdateFacilityRequest) (*models.Facility, error) {
-    var facility models.Facility
-    if err := s.DB.First(&facility, id).Error; err != nil {
-        return nil, err
-    }
-    facility.Name = req.Name
-    if err := s.DB.Save(&facility).Error; err != nil {
-        return nil, err
-    }
-    return &facility, nil
+	facility.Name = req.Name
+	if err := s.DB.Save(&facility).Error; err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *FacilityService) DeleteFacility(id uint) error {
-    if err := s.DB.Delete(&models.Facility{}, id).Error; err != nil {
+    if err := s.DB.First(&models.Facility{}, id).Error; err != nil {
+        if err == gorm.ErrRecordNotFound {
+            return utils.ErrFacilityNotFound
+        }
         return err
     }
-    return nil
+
+	if err := s.DB.Delete(&models.Facility{}, id).Error; err != nil {
+		return err
+	}
+	return nil
 }

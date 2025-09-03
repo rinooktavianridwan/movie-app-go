@@ -25,10 +25,10 @@ func NewPromoModule(db *gorm.DB) *PromoModule {
 }
 
 func RegisterRoutes(rg *gin.RouterGroup, module *PromoModule) {
-	rg.POST("/promos", middleware.AdminOnly(), module.PromoController.CreatePromo)
+	rg.POST("/promos", middleware.AdminOnly(), module.PromoController.Create)
 	rg.GET("/promos", middleware.Auth(), module.PromoController.GetAllPromos)
 	rg.GET("/promos/:id", middleware.Auth(), module.PromoController.GetPromoByID)
-	rg.PUT("/promos/:id", middleware.AdminOnly(), module.PromoController.UpdatePromo)
+	rg.PUT("/promos/:id", middleware.AdminOnly(), module.PromoController.Update)
 	rg.POST("/promos/:id/toggle", middleware.AdminOnly(), module.PromoController.TogglePromoStatus)
-	rg.DELETE("/promos/:id", middleware.AdminOnly(), module.PromoController.DeletePromo)
+	rg.DELETE("/promos/:id", middleware.AdminOnly(), module.PromoController.Delete)
 }

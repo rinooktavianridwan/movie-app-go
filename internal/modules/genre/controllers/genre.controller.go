@@ -1,12 +1,14 @@
 package controllers
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
 	"movie-app-go/internal/modules/genre/requests"
 	"movie-app-go/internal/modules/genre/responses"
 	"movie-app-go/internal/modules/genre/services"
+	"movie-app-go/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,15 +24,21 @@ func NewGenreController(s *services.GenreService) *GenreController {
 func (c *GenreController) Create(ctx *gin.Context) {
 	var req requests.CreateGenreRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
-	genre, err := c.GenreService.CreateGenre(req.Name)
+
+	err := c.GenreService.CreateGenre(req.Name)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
-	ctx.JSON(http.StatusCreated, responses.ToGenreResponse(genre))
+
+	ctx.JSON(http.StatusCreated, utils.SuccessResponse(
+		http.StatusCreated,
+		"Genre created successfully",
+		nil,
+	))
 }
 
 func (c *GenreController) GetAll(ctx *gin.Context) {
@@ -39,64 +47,87 @@ func (c *GenreController) GetAll(ctx *gin.Context) {
 
 	result, err := c.GenreService.GetAllGenresPaginated(page, perPage)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
-	resp := responses.ToGenreResponses(result.Data)
+	genreResponses := responses.ToGenreResponses(result.Data)
 	response := responses.PaginatedGenreResponse{
 		Page:      result.Page,
 		PerPage:   result.PerPage,
 		Total:     result.Total,
 		TotalPage: result.TotalPages,
-		Data:      resp,
+		Data:      genreResponses,
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Genres retrieved successfully",
+		response,
+	))
 }
 
 func (c *GenreController) GetByID(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+	id, _ := strconv.Atoi(ctx.Param("id"))
 	genre, err := c.GenreService.GetGenreByID(uint(id))
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "genre not found"})
+		if errors.Is(err, utils.ErrGenreNotFound) {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		} else {
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+		}
 		return
 	}
-	ctx.JSON(http.StatusOK, responses.ToGenreResponse(genre))
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Genre retrieved successfully",
+		responses.ToGenreResponse(genre),
+	))
 }
 
 func (c *GenreController) Update(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+	id, _ := strconv.Atoi(ctx.Param("id"))
 	var req requests.UpdateGenreRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
-	genre, err := c.GenreService.UpdateGenre(uint(id), req.Name)
+
+	err := c.GenreService.UpdateGenre(uint(id), req.Name)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "genre not found"})
+		if errors.Is(err, utils.ErrGenreNotFound) {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		} else {
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+		}
 		return
 	}
-	ctx.JSON(http.StatusOK, responses.ToGenreResponse(genre))
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Genre updated successfully",
+		nil,
+	))
 }
 
 func (c *GenreController) Delete(ctx *gin.Context) {
-	id, err := strconv.Atoi(ctx.Param("id"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+	id, _ := strconv.Atoi(ctx.Param("id"))
 	if err := c.GenreService.DeleteGenre(uint(id)); err != nil {
-		ctx.JSON(http.StatusNotFound, gin.H{"error": "genre not found"})
+		switch {
+		case errors.Is(err, utils.ErrGenreNotFound):
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		case errors.Is(err, utils.ErrGenreInUse):
+			ctx.JSON(http.StatusConflict, utils.ErrorResponse(http.StatusConflict, err.Error()))
+		default:
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+		}
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"message": "genre deleted"})
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Genre deleted successfully",
+		nil,
+	))
 }
