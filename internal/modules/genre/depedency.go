@@ -3,6 +3,7 @@ package genre
 import (
 	"movie-app-go/internal/middleware"
 	"movie-app-go/internal/modules/genre/controllers"
+	"movie-app-go/internal/modules/genre/repositories"
 	"movie-app-go/internal/modules/genre/services"
 
 	"github.com/gin-gonic/gin"
@@ -14,7 +15,8 @@ type GenreModule struct {
 }
 
 func NewGenreModule(db *gorm.DB) *GenreModule {
-	genreService := services.NewGenreService(db)
+	genreRepo := repositories.NewGenreRepository(db)
+	genreService := services.NewGenreService(genreRepo)
 
 	return &GenreModule{
 		GenreController: controllers.NewGenreController(genreService),

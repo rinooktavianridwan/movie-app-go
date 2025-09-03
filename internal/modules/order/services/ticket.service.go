@@ -3,6 +3,7 @@ package services
 import (
 	"movie-app-go/internal/enums"
 	"movie-app-go/internal/models"
+	"movie-app-go/internal/modules/order/repositories"
 	"movie-app-go/internal/repository"
 	"movie-app-go/internal/utils"
 
@@ -10,109 +11,78 @@ import (
 )
 
 type TicketService struct {
-	DB *gorm.DB
+	TicketRepo *repositories.TicketRepository
 }
 
-func NewTicketService(db *gorm.DB) *TicketService {
-	return &TicketService{DB: db}
+func NewTicketService(ticketRepo *repositories.TicketRepository) *TicketService {
+	return &TicketService{
+		TicketRepo: ticketRepo,
+	}
 }
 
 func (s *TicketService) GetTicketsByUser(userID uint, page, perPage int) (repository.PaginationResult[models.Ticket], error) {
-	query := s.DB.Preload("Transaction").
-		Preload("Transaction.User").
-		Preload("Schedule").
-		Preload("Schedule.Movie").
-		Preload("Schedule.Studio").
-		Joins("JOIN transactions ON tickets.transaction_id = transactions.id").
-		Where("transactions.user_id = ?", userID).
-		Order("tickets.created_at DESC")
-
-	return repository.Paginate[models.Ticket](query, page, perPage)
+	return s.TicketRepo.GetByUserIDPaginated(userID, page, perPage)
 }
 
 func (s *TicketService) GetAllTickets(page, perPage int) (repository.PaginationResult[models.Ticket], error) {
-	query := s.DB.Preload("Transaction").
-		Preload("Transaction.User").
-		Preload("Schedule").
-		Preload("Schedule.Movie").
-		Preload("Schedule.Studio").
-		Order("created_at DESC")
-
-	return repository.Paginate[models.Ticket](query, page, perPage)
+	return s.TicketRepo.GetAllPaginated(page, perPage)
 }
 
 func (s *TicketService) GetTicketByID(id uint, userID *uint) (*models.Ticket, error) {
-	query := s.DB.Preload("Transaction").
-		Preload("Transaction.User").
-		Preload("Schedule").
-		Preload("Schedule.Movie").
-		Preload("Schedule.Studio")
-
-	if userID != nil {
-		query = query.Joins("JOIN transactions ON tickets.transaction_id = transactions.id").
-			Where("transactions.user_id = ?", *userID)
-	}
-
-	var ticket models.Ticket
-	if err := query.First(&ticket, id).Error; err != nil {
+	ticket, err := s.TicketRepo.GetByID(id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, utils.ErrTicketNotFound
+		}
 		return nil, err
 	}
-	return &ticket, nil
+
+	if userID != nil {
+		ownershipCount, err := s.TicketRepo.CheckTicketOwnership(id, *userID)
+		if err != nil {
+			return nil, err
+		}
+		if ownershipCount == 0 {
+			return nil, utils.ErrTicketNotFound
+		}
+	}
+
+	return ticket, nil
 }
 
 func (s *TicketService) GetTicketsBySchedule(scheduleID uint, page, perPage int) (repository.PaginationResult[models.Ticket], error) {
-	query := s.DB.Preload("Transaction").
-		Preload("Transaction.User").
-		Preload("Schedule").
-		Preload("Schedule.Movie").
-		Preload("Schedule.Studio").
-		Where("schedule_id = ?", scheduleID).
-		Order("seat_number ASC")
-
-	return repository.Paginate[models.Ticket](query, page, perPage)
+	return s.TicketRepo.GetByScheduleIDPaginated(scheduleID, page, perPage)
 }
 
 func (s *TicketService) ScanTicket(id uint, userID *uint) error {
-	var ticket models.Ticket
+	var ticket *models.Ticket
 
-	err := s.DB.Transaction(func(tx *gorm.DB) error {
-		query := tx.Preload("Transaction").
-			Preload("Schedule").
-			Preload("Schedule.Movie").
-			Preload("Schedule.Studio")
+	err := s.TicketRepo.WithTransaction(func(tx *gorm.DB) error {
+        var err error
+        ticket, err = s.TicketRepo.GetByID(id)
+        if err != nil {
+            if err == gorm.ErrRecordNotFound {
+                return utils.ErrTicketNotFound
+            }
+            return err
+        }
 
-		if userID != nil {
-			query = query.Joins("JOIN transactions ON tickets.transaction_id = transactions.id").
-				Where("transactions.user_id = ?", *userID)
-		}
+        switch ticket.Status {
+        case enums.TicketStatusPending:
+            return utils.ErrTicketNotPaid
+        case enums.TicketStatusCancelled:
+            return utils.ErrTicketCancelled
+        case enums.TicketStatusUsed:
+            return utils.ErrTicketAlreadyScanned
+        case enums.TicketStatusActive:
+            break
+        default:
+            return utils.ErrTicketNotFound
+        }
 
-		if err := query.First(&ticket, id).Error; err != nil {
-			return err
-		}
+        ticket.Status = enums.TicketStatusUsed
+        return s.TicketRepo.UpdateTicket(ticket)
+    })
 
-		switch ticket.Status {
-		case enums.TicketStatusPending:
-			return utils.ErrTicketNotPaid
-		case enums.TicketStatusCancelled:
-			return utils.ErrTicketCancelled
-		case enums.TicketStatusUsed:
-			return utils.ErrTicketAlreadyScanned
-		case enums.TicketStatusActive:
-			break
-		default:
-			return utils.ErrTicketNotFound
-		}
-
-		ticket.Status = enums.TicketStatusUsed
-		if err := tx.Save(&ticket).Error; err != nil {
-			return err
-		}
-
-		return nil
-	})
-
-	if err != nil {
-		return err
-	}
-	return nil
+    return err
 }

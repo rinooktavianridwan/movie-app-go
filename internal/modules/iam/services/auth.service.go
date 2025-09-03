@@ -3,6 +3,7 @@ package services
 import (
 	"fmt"
 	"movie-app-go/internal/models"
+	"movie-app-go/internal/modules/iam/repositories"
 	"movie-app-go/internal/modules/iam/requests"
 	"movie-app-go/internal/utils"
 	"os"
@@ -14,80 +15,56 @@ import (
 )
 
 type AuthService struct {
-	DB *gorm.DB
+	AuthRepo *repositories.AuthRepository
 }
 
-func NewAuthService(db *gorm.DB) *AuthService {
-	return &AuthService{DB: db}
+func NewAuthService(authRepo *repositories.AuthRepository) *AuthService {
+	return &AuthService{AuthRepo: authRepo}
 }
 
 func (s *AuthService) Register(req *requests.RegisterRequest) error {
+	exists, err := s.AuthRepo.ExistsByEmail(req.Email)
+    if err != nil {
+        return err
+    }
+    if exists {
+        return utils.ErrEmailAlreadyExists
+    }
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+    if err != nil {
+        return err
+    }
+
 	user := models.User{
-		Name:     req.Name,
-		Email:    req.Email,
-		Password: req.Password,
-	}
-	if req.IsAdmin != nil {
-		user.IsAdmin = *req.IsAdmin
-	}
+        Name:     req.Name,
+        Email:    req.Email,
+        Password: string(hashedPassword),
+        IsAdmin:  false,
+    }
 
-	var existing models.User
-	hashed, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-	user.Password = string(hashed)
-
-	if err := s.DB.Unscoped().Where("email = ?", user.Email).First(&existing).Error; err == nil {
-		if existing.DeletedAt.Valid {
-			existing.DeletedAt = gorm.DeletedAt{}
-			existing.Name = user.Name
-			existing.Password = user.Password
-			existing.IsAdmin = user.IsAdmin
-			if err := s.DB.Unscoped().Save(&existing).Error; err != nil {
-				return err
-			}
-			return nil
-		}
-		return utils.ErrEmailAlreadyExists
-	}
-
-	if err := s.DB.Create(&user).Error; err != nil {
-		return err
-	}
-	return nil
+	return s.AuthRepo.Create(&user)
 }
 
 func (s *AuthService) Login(req *requests.LoginRequest) (*models.User, string, error) {
-	var user models.User
-	if err := s.DB.Where("email = ?", req.Email).First(&user).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
+	user, err := s.AuthRepo.GetUserByEmail(req.Email)
+    if err != nil {
+        if err == gorm.ErrRecordNotFound {
             return nil, "", utils.ErrInvalidCredentials
         }
         return nil, "", err
-	}
+    }
+
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-		return nil, "", utils.ErrInvalidCredentials
-	}
+        return nil, "", utils.ErrInvalidCredentials
+    }
 
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		secret = "secret"
-	}
+	token, err := s.generateJWT(user)
+    if err != nil {
+        return nil, "", err
+    }
 
-	claims := jwt.MapClaims{
-		"user_id":  user.ID,
-		"email":    user.Email,
-		"is_admin": user.IsAdmin,
-		"exp":      time.Now().Add(time.Hour * 24).Unix(),
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(secret))
-	if err != nil {
-		return nil, "", err
-	}
-	return &user, tokenString, nil
+    return user, token, nil
 }
 
 func (s *AuthService) Logout(tokenString string) error {
@@ -110,4 +87,16 @@ func (s *AuthService) Logout(tokenString string) error {
 		exp = 0
 	}
 	return BlacklistToken(tokenString, time.Duration(exp)*time.Second)
+}
+
+func (s *AuthService) generateJWT(user *models.User) (string, error) {
+    claims := jwt.MapClaims{
+        "user_id":  user.ID,
+        "email":    user.Email,
+        "is_admin": user.IsAdmin,
+        "exp":      time.Now().Add(time.Hour * 24).Unix(),
+    }
+
+    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+    return token.SignedString([]byte(os.Getenv("JWT_SECRET")))
 }

@@ -7,6 +7,7 @@ import (
 	"movie-app-go/internal/jobs"
 	"movie-app-go/internal/models"
 	notificationServices "movie-app-go/internal/modules/notification/services"
+	"movie-app-go/internal/modules/order/repositories"
 	"movie-app-go/internal/modules/order/requests"
 	promoRequests "movie-app-go/internal/modules/promo/requests"
 	promoServices "movie-app-go/internal/modules/promo/services"
@@ -18,22 +19,32 @@ import (
 )
 
 type TransactionService struct {
-	DB                  *gorm.DB
+	TransactionRepo     *repositories.TransactionRepository
 	QueueService        *jobs.QueueService
 	PromoService        *promoServices.PromoService
 	NotificationService *notificationServices.NotificationService
 }
 
-func NewTransactionService(db *gorm.DB, queueService *jobs.QueueService, promoService *promoServices.PromoService) *TransactionService {
-	return &TransactionService{DB: db, QueueService: queueService, PromoService: promoService, NotificationService: notificationServices.NewNotificationService(db)}
+func NewTransactionService(
+	transactionRepo *repositories.TransactionRepository,
+	queueService *jobs.QueueService,
+	promoService *promoServices.PromoService,
+	notificationService *notificationServices.NotificationService,
+) *TransactionService {
+	return &TransactionService{
+		TransactionRepo:     transactionRepo,
+		QueueService:        queueService,
+		PromoService:        promoService,
+		NotificationService: notificationService,
+	}
 }
 
 func (s *TransactionService) CreateTransaction(userID uint, req *requests.CreateTransactionRequest) error {
 	var transaction *models.Transaction
 
-	err := s.DB.Transaction(func(tx *gorm.DB) error {
-		var schedule models.Schedule
-		if err := tx.Preload("Movie").Preload("Studio").First(&schedule, req.ScheduleID).Error; err != nil {
+	err := s.TransactionRepo.WithTransaction(func(tx *gorm.DB) error {
+		schedule, err := s.TransactionRepo.GetScheduleWithMovieAndStudio(req.ScheduleID)
+		if err != nil {
 			if err == gorm.ErrRecordNotFound {
 				return utils.ErrScheduleNotFound
 			}
@@ -44,11 +55,8 @@ func (s *TransactionService) CreateTransaction(userID uint, req *requests.Create
 			return fmt.Errorf("seat numbers exceed studio capacity")
 		}
 
-		var existingTickets int64
-		if err := tx.Model(&models.Ticket{}).
-			Where("schedule_id = ? AND seat_number IN ? AND status != ?",
-				req.ScheduleID, req.SeatNumbers, enums.TicketStatusCancelled).
-			Count(&existingTickets).Error; err != nil {
+		existingTickets, err := s.TransactionRepo.CountExistingTickets(req.ScheduleID, req.SeatNumbers)
+		if err != nil {
 			return err
 		}
 		if existingTickets > 0 {
@@ -98,7 +106,7 @@ func (s *TransactionService) CreateTransaction(userID uint, req *requests.Create
 			PromoID:        promoID,
 		}
 
-		if err := tx.Create(transaction).Error; err != nil {
+		if err := s.TransactionRepo.CreateTransaction(transaction); err != nil {
 			return err
 		}
 
@@ -109,12 +117,11 @@ func (s *TransactionService) CreateTransaction(userID uint, req *requests.Create
 				TransactionID:  transaction.ID,
 				DiscountAmount: discountAmount,
 			}
-			if err := tx.Create(&promoUsage).Error; err != nil {
+			if err := s.TransactionRepo.CreatePromoUsage(&promoUsage); err != nil {
 				return err
 			}
 
-			if err := tx.Model(&models.Promo{}).Where("id = ?", *promoID).
-				UpdateColumn("usage_count", gorm.Expr("usage_count + ?", 1)).Error; err != nil {
+			if err := s.TransactionRepo.IncrementPromoUsageCount(*promoID); err != nil {
 				return err
 			}
 		}
@@ -130,7 +137,7 @@ func (s *TransactionService) CreateTransaction(userID uint, req *requests.Create
 			})
 		}
 
-		if err := tx.Create(&tickets).Error; err != nil {
+		if err := s.TransactionRepo.CreateTickets(tickets); err != nil {
 			return err
 		}
 
@@ -149,54 +156,27 @@ func (s *TransactionService) CreateTransaction(userID uint, req *requests.Create
 }
 
 func (s *TransactionService) GetTransactionsByUser(userID uint, page, perPage int) (repository.PaginationResult[models.Transaction], error) {
-	query := s.DB.Preload("User").
-		Preload("Tickets").
-		Preload("Tickets.Schedule").
-		Preload("Tickets.Schedule.Movie").
-		Preload("Tickets.Schedule.Studio").
-		Preload("Promo").
-		Where("user_id = ?", userID).
-		Order("created_at DESC")
-
-	return repository.Paginate[models.Transaction](query, page, perPage)
+	return s.TransactionRepo.GetByUserIDPaginated(userID, page, perPage)
 }
 
 func (s *TransactionService) GetAllTransactions(page, perPage int) (repository.PaginationResult[models.Transaction], error) {
-	query := s.DB.Preload("User").
-		Preload("Tickets").
-		Preload("Tickets.Schedule").
-		Preload("Tickets.Schedule.Movie").
-		Preload("Tickets.Schedule.Studio").
-		Preload("Promo").
-		Order("created_at DESC")
-
-	return repository.Paginate[models.Transaction](query, page, perPage)
+	return s.TransactionRepo.GetAllPaginated(page, perPage)
 }
 
 func (s *TransactionService) GetTransactionByID(id uint, userID *uint) (*models.Transaction, error) {
-	query := s.DB.Preload("User").
-		Preload("Tickets").
-		Preload("Tickets.Schedule").
-		Preload("Tickets.Schedule.Movie").
-		Preload("Tickets.Schedule.Studio").
-		Preload("Promo")
-
 	if userID != nil {
-		query = query.Where("user_id = ?", *userID)
+		return s.TransactionRepo.GetByIDWithUserFilter(id, *userID)
 	}
-
-	var transaction models.Transaction
-	if err := query.First(&transaction, id).Error; err != nil {
-		return nil, err
-	}
-	return &transaction, nil
+	return s.TransactionRepo.GetByID(id)
 }
 
 func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymentRequest) error {
-	var transaction models.Transaction
+	var transaction *models.Transaction
 
-	err := s.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.First(&transaction, id).Error; err != nil {
+	err := s.TransactionRepo.WithTransaction(func(tx *gorm.DB) error {
+		var err error
+		transaction, err = s.TransactionRepo.GetByID(id)
+		if err != nil {
 			return err
 		}
 
@@ -205,20 +185,16 @@ func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymen
 		}
 
 		transaction.PaymentStatus = req.PaymentStatus
-		if err := tx.Save(&transaction).Error; err != nil {
+		if err := s.TransactionRepo.UpdateTransaction(transaction); err != nil {
 			return err
 		}
 
 		if req.PaymentStatus == enums.PaymentStatusSuccess {
-			if err := tx.Model(&models.Ticket{}).
-				Where("transaction_id = ?", id).
-				Update("status", enums.TicketStatusActive).Error; err != nil {
+			if err := s.TransactionRepo.UpdateTicketsByTransactionID(id, enums.TicketStatusActive); err != nil {
 				return err
 			}
 		} else if req.PaymentStatus == enums.PaymentStatusFailed {
-			if err := tx.Model(&models.Ticket{}).
-				Where("transaction_id = ?", id).
-				Update("status", enums.TicketStatusCancelled).Error; err != nil {
+			if err := s.TransactionRepo.UpdateTicketsByTransactionID(id, enums.TicketStatusCancelled); err != nil {
 				return err
 			}
 		}
@@ -231,11 +207,8 @@ func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymen
 	}
 
 	if req.PaymentStatus == enums.PaymentStatusSuccess {
-		var schedule models.Schedule
-		if err := s.DB.Preload("Movie").
-			Joins("JOIN tickets ON tickets.schedule_id = schedules.id").
-			Where("tickets.transaction_id = ?", id).
-			First(&schedule).Error; err != nil {
+		schedule, err := s.TransactionRepo.GetScheduleByTransactionID(id)
+		if err != nil {
 			log.Printf("Failed to get schedule for transaction %d: %v", id, err)
 		} else {
 			go func() {

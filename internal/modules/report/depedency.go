@@ -3,6 +3,7 @@ package report
 import (
 	"movie-app-go/internal/middleware"
 	"movie-app-go/internal/modules/report/controllers"
+	"movie-app-go/internal/modules/report/repositories"
 	"movie-app-go/internal/modules/report/services"
 
 	"github.com/gin-gonic/gin"
@@ -14,7 +15,8 @@ type ReportModule struct {
 }
 
 func NewReportModule(db *gorm.DB) *ReportModule {
-	reportService := services.NewReportService(db)
+	reportRepo := repositories.NewReportRepository(db)
+	reportService := services.NewReportService(reportRepo)
 
 	return &ReportModule{
 		ReportController: controllers.NewReportController(reportService),
