@@ -13,12 +13,6 @@ import (
 	"gorm.io/gorm"
 )
 
-const (
-	TypeMovieReminder     = "notification:movie_reminder"
-	TypePromoNotification = "notification:promo_notification"
-	TypeBookingConfirm    = "notification:booking_confirmation"
-)
-
 type MovieReminderPayload struct {
 	UserID       uint   `json:"user_id"`
 	MovieID      uint   `json:"movie_id"`

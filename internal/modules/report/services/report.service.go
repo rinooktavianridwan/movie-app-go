@@ -1,7 +1,7 @@
 package services
 
 import (
-	"movie-app-go/internal/constants"
+	"movie-app-go/internal/enums"
 	"movie-app-go/internal/modules/report/responses"
 	"movie-app-go/internal/repository"
 	"time"
@@ -21,14 +21,14 @@ func (s *ReportService) GetDailySalesReport(startDate, endDate time.Time, page, 
 	dataQuery := s.DB.Table("transactions t").
 		Select("DATE(t.created_at) as date, COALESCE(SUM(tk.price), 0) as total_revenue, COUNT(tk.id) as total_tickets").
 		Joins("LEFT JOIN tickets tk ON t.id = tk.transaction_id").
-		Where("t.payment_status = ?", constants.PaymentStatusSuccess).
+		Where("t.payment_status = ?", enums.PaymentStatusSuccess).
 		Where("DATE(t.created_at) BETWEEN ? AND ?", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")).
 		Group("DATE(t.created_at)").
 		Order("date DESC")
 
 	countQuery := s.DB.Table("transactions t").
 		Joins("LEFT JOIN tickets tk ON t.id = tk.transaction_id").
-		Where("t.payment_status = ?", constants.PaymentStatusSuccess).
+		Where("t.payment_status = ?", enums.PaymentStatusSuccess).
 		Where("DATE(t.created_at) BETWEEN ? AND ?", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")).
 		Group("DATE(t.created_at)")
 
@@ -39,14 +39,14 @@ func (s *ReportService) GetMonthlySalesReport(year int, page, perPage int) (repo
 	dataQuery := s.DB.Table("transactions t").
 		Select("TRIM(TO_CHAR(t.created_at, 'Month')) as month, EXTRACT(YEAR FROM t.created_at) as year, COALESCE(SUM(tk.price), 0) as total_revenue, COUNT(tk.id) as total_tickets").
 		Joins("LEFT JOIN tickets tk ON t.id = tk.transaction_id").
-		Where("t.payment_status = ?", constants.PaymentStatusSuccess).
+		Where("t.payment_status = ?", enums.PaymentStatusSuccess).
 		Where("EXTRACT(YEAR FROM t.created_at) = ?", year).
 		Group("EXTRACT(MONTH FROM t.created_at), EXTRACT(YEAR FROM t.created_at), TRIM(TO_CHAR(t.created_at, 'Month'))").
 		Order("EXTRACT(MONTH FROM t.created_at)")
 
 	countQuery := s.DB.Table("transactions t").
 		Joins("LEFT JOIN tickets tk ON t.id = tk.transaction_id").
-		Where("t.payment_status = ?", constants.PaymentStatusSuccess).
+		Where("t.payment_status = ?", enums.PaymentStatusSuccess).
 		Where("EXTRACT(YEAR FROM t.created_at) = ?", year).
 		Group("EXTRACT(MONTH FROM t.created_at), EXTRACT(YEAR FROM t.created_at), TO_CHAR(t.created_at, 'Month')")
 
@@ -59,7 +59,7 @@ func (s *ReportService) GetDailyReportByMovie(startDate, endDate time.Time, page
 		Joins("LEFT JOIN schedules s ON m.id = s.movie_id").
 		Joins("LEFT JOIN tickets tk ON s.id = tk.schedule_id").
 		Joins("LEFT JOIN transactions t ON tk.transaction_id = t.id").
-		Where("t.payment_status = ?", constants.PaymentStatusSuccess).
+		Where("t.payment_status = ?", enums.PaymentStatusSuccess).
 		Where("DATE(t.created_at) BETWEEN ? AND ?", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")).
 		Group("DATE(t.created_at), m.id, m.title").
 		Having("COUNT(tk.id) > 0").
@@ -69,7 +69,7 @@ func (s *ReportService) GetDailyReportByMovie(startDate, endDate time.Time, page
 		Joins("LEFT JOIN schedules s ON m.id = s.movie_id").
 		Joins("LEFT JOIN tickets tk ON s.id = tk.schedule_id").
 		Joins("LEFT JOIN transactions t ON tk.transaction_id = t.id").
-		Where("t.payment_status = ?", constants.PaymentStatusSuccess).
+		Where("t.payment_status = ?", enums.PaymentStatusSuccess).
 		Where("DATE(t.created_at) BETWEEN ? AND ?", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")).
 		Group("DATE(t.created_at), m.id, m.title").
 		Having("COUNT(tk.id) > 0")
@@ -83,7 +83,7 @@ func (s *ReportService) GetDailyReportByStudio(startDate, endDate time.Time, pag
 		Joins("LEFT JOIN schedules s ON st.id = s.studio_id").
 		Joins("LEFT JOIN tickets tk ON s.id = tk.schedule_id").
 		Joins("LEFT JOIN transactions t ON tk.transaction_id = t.id").
-		Where("t.payment_status = ?", constants.PaymentStatusSuccess).
+		Where("t.payment_status = ?", enums.PaymentStatusSuccess).
 		Where("DATE(t.created_at) BETWEEN ? AND ?", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")).
 		Group("DATE(t.created_at), st.id, st.name").
 		Having("COUNT(tk.id) > 0").
@@ -93,7 +93,7 @@ func (s *ReportService) GetDailyReportByStudio(startDate, endDate time.Time, pag
 		Joins("LEFT JOIN schedules s ON st.id = s.studio_id").
 		Joins("LEFT JOIN tickets tk ON s.id = tk.schedule_id").
 		Joins("LEFT JOIN transactions t ON tk.transaction_id = t.id").
-		Where("t.payment_status = ?", constants.PaymentStatusSuccess).
+		Where("t.payment_status = ?", enums.PaymentStatusSuccess).
 		Where("DATE(t.created_at) BETWEEN ? AND ?", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")).
 		Group("DATE(t.created_at), st.id, st.name").
 		Having("COUNT(tk.id) > 0")
@@ -107,7 +107,7 @@ func (s *ReportService) GetMonthlyReportByMovie(year int, page, perPage int) (re
 		Joins("LEFT JOIN schedules s ON m.id = s.movie_id").
 		Joins("LEFT JOIN tickets tk ON s.id = tk.schedule_id").
 		Joins("LEFT JOIN transactions t ON tk.transaction_id = t.id").
-		Where("t.payment_status = ?", constants.PaymentStatusSuccess).
+		Where("t.payment_status = ?", enums.PaymentStatusSuccess).
 		Where("EXTRACT(YEAR FROM t.created_at) = ?", year).
 		Group("EXTRACT(MONTH FROM t.created_at), EXTRACT(YEAR FROM t.created_at), TRIM(TO_CHAR(t.created_at, 'Month')), m.id, m.title").
 		Having("COUNT(tk.id) > 0").
@@ -117,7 +117,7 @@ func (s *ReportService) GetMonthlyReportByMovie(year int, page, perPage int) (re
 		Joins("LEFT JOIN schedules s ON m.id = s.movie_id").
 		Joins("LEFT JOIN tickets tk ON s.id = tk.schedule_id").
 		Joins("LEFT JOIN transactions t ON tk.transaction_id = t.id").
-		Where("t.payment_status = ?", constants.PaymentStatusSuccess).
+		Where("t.payment_status = ?", enums.PaymentStatusSuccess).
 		Where("EXTRACT(YEAR FROM t.created_at) = ?", year).
 		Group("EXTRACT(MONTH FROM t.created_at), EXTRACT(YEAR FROM t.created_at), TO_CHAR(t.created_at, 'Month'), m.id, m.title").
 		Having("COUNT(tk.id) > 0")
@@ -131,7 +131,7 @@ func (s *ReportService) GetMonthlyReportByStudio(year int, page, perPage int) (r
 		Joins("LEFT JOIN schedules s ON st.id = s.studio_id").
 		Joins("LEFT JOIN tickets tk ON s.id = tk.schedule_id").
 		Joins("LEFT JOIN transactions t ON tk.transaction_id = t.id").
-		Where("t.payment_status = ?", constants.PaymentStatusSuccess).
+		Where("t.payment_status = ?", enums.PaymentStatusSuccess).
 		Where("EXTRACT(YEAR FROM t.created_at) = ?", year).
 		Group("EXTRACT(MONTH FROM t.created_at), EXTRACT(YEAR FROM t.created_at), TRIM(TO_CHAR(t.created_at, 'Month')), st.id, st.name").
 		Having("COUNT(tk.id) > 0").
@@ -141,7 +141,7 @@ func (s *ReportService) GetMonthlyReportByStudio(year int, page, perPage int) (r
 		Joins("LEFT JOIN schedules s ON st.id = s.studio_id").
 		Joins("LEFT JOIN tickets tk ON s.id = tk.schedule_id").
 		Joins("LEFT JOIN transactions t ON tk.transaction_id = t.id").
-		Where("t.payment_status = ?", constants.PaymentStatusSuccess).
+		Where("t.payment_status = ?", enums.PaymentStatusSuccess).
 		Where("EXTRACT(YEAR FROM t.created_at) = ?", year).
 		Group("EXTRACT(MONTH FROM t.created_at), EXTRACT(YEAR FROM t.created_at), TO_CHAR(t.created_at, 'Month'), st.id, st.name").
 		Having("COUNT(tk.id) > 0")

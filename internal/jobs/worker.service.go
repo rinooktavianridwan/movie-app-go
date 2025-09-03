@@ -56,7 +56,7 @@ func (w *WorkerService) registerHandlers() {
 	w.mux.HandleFunc(constants.TypePaymentTimeout, paymentHandler.HandlePaymentTimeout)
 
 	notificationHandler := notificationJobs.NewNotificationJobHandler(w.DB)
-	w.mux.HandleFunc(notificationJobs.TypeMovieReminder, notificationHandler.HandleMovieReminder)
-	w.mux.HandleFunc(notificationJobs.TypePromoNotification, notificationHandler.HandlePromoNotification)
-	w.mux.HandleFunc(notificationJobs.TypeBookingConfirm, notificationHandler.HandleBookingConfirmation)
+	w.mux.HandleFunc(constants.JobTypeMovieReminder, notificationHandler.HandleMovieReminder)
+	w.mux.HandleFunc(constants.JobTypePromoNotification, notificationHandler.HandlePromoNotification)
+	w.mux.HandleFunc(constants.JobTypeBookingConfirm, notificationHandler.HandleBookingConfirmation)
 }

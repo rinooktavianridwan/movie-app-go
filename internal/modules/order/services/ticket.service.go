@@ -1,7 +1,7 @@
 package services
 
 import (
-	"movie-app-go/internal/constants"
+	"movie-app-go/internal/enums"
 	"movie-app-go/internal/models"
 	"movie-app-go/internal/repository"
 	"movie-app-go/internal/utils"
@@ -91,19 +91,19 @@ func (s *TicketService) ScanTicket(id uint, userID *uint) error {
 		}
 
 		switch ticket.Status {
-		case constants.TicketStatusPending:
+		case enums.TicketStatusPending:
 			return utils.ErrTicketNotPaid
-		case constants.TicketStatusCancelled:
+		case enums.TicketStatusCancelled:
 			return utils.ErrTicketCancelled
-		case constants.TicketStatusUsed:
+		case enums.TicketStatusUsed:
 			return utils.ErrTicketAlreadyScanned
-		case constants.TicketStatusActive:
+		case enums.TicketStatusActive:
 			break
 		default:
 			return utils.ErrTicketNotFound
 		}
 
-		ticket.Status = constants.TicketStatusUsed
+		ticket.Status = enums.TicketStatusUsed
 		if err := tx.Save(&ticket).Error; err != nil {
 			return err
 		}
