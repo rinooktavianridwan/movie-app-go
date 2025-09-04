@@ -130,7 +130,7 @@ func (c *PromoController) TogglePromoStatus(ctx *gin.Context) {
 		return
 	}
 
-	promo, err := c.PromoService.TogglePromoStatus(uint(id))
+	err = c.PromoService.TogglePromoStatus(uint(id))
 	if err != nil {
 		if errors.Is(err, utils.ErrPromoNotFound) {
             ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
@@ -143,7 +143,7 @@ func (c *PromoController) TogglePromoStatus(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, utils.SuccessResponse(
         http.StatusOK,
         "Promo status updated successfully",
-        responses.ToPromoResponse(*promo),
+        nil,
     ))
 }
 

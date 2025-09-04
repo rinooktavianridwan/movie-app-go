@@ -2,6 +2,7 @@ package services
 
 import (
 	"movie-app-go/internal/models"
+	"movie-app-go/internal/modules/studio/repositories"
 	"movie-app-go/internal/modules/studio/requests"
 	"movie-app-go/internal/repository"
 	"movie-app-go/internal/utils"
@@ -10,29 +11,30 @@ import (
 )
 
 type StudioService struct {
-	DB *gorm.DB
+	StudioRepo   *repositories.StudioRepository
+	FacilityRepo *repositories.FacilityRepository
 }
 
-func NewStudioService(db *gorm.DB) *StudioService {
-	return &StudioService{DB: db}
+func NewStudioService(studioRepo *repositories.StudioRepository, facilityRepo *repositories.FacilityRepository) *StudioService {
+	return &StudioService{StudioRepo: studioRepo, FacilityRepo: facilityRepo}
 }
 
 func (s *StudioService) CreateStudio(req *requests.CreateStudioRequest) error {
-	return s.DB.Transaction(func(tx *gorm.DB) error {
-		var count int64
-		if err := tx.Model(&models.Facility{}).Where("id IN ?", req.FacilityIDs).Count(&count).Error; err != nil {
-			return err
-		}
-		if count != int64(len(req.FacilityIDs)) {
-			return utils.ErrInvalidFacilityIDs
-		}
+	count, err := s.FacilityRepo.CountFacilitiesByIDs(req.FacilityIDs)
+	if err != nil {
+		return err
+	}
+	if count != int64(len(req.FacilityIDs)) {
+		return utils.ErrInvalidFacilityIDs
+	}
 
-		studio := &models.Studio{
-			Name:         req.Name,
-			SeatCapacity: req.SeatCapacity,
-		}
+	studio := models.Studio{
+		Name:         req.Name,
+		SeatCapacity: req.SeatCapacity,
+	}
 
-		if err := tx.Create(studio).Error; err != nil {
+	return s.StudioRepo.WithTransaction(func(tx *gorm.DB) error {
+		if err := s.StudioRepo.CreateWithTx(tx, &studio); err != nil {
 			return err
 		}
 
@@ -43,59 +45,49 @@ func (s *StudioService) CreateStudio(req *requests.CreateStudioRequest) error {
 				FacilityID: fid,
 			})
 		}
-		if len(facilityStudios) > 0 {
-			if err := tx.Create(&facilityStudios).Error; err != nil {
-				return err
-			}
-		}
-		return nil
+
+		return s.StudioRepo.CreateFacilityStudiosWithTx(tx, facilityStudios)
 	})
 }
 
 func (s *StudioService) GetAllStudiosPaginated(page, perPage int) (repository.PaginationResult[models.Studio], error) {
-	return repository.Paginate[models.Studio](
-		s.DB.Preload("FacilityStudios.Facility"),
-		page,
-		perPage,
-	)
+	return s.StudioRepo.GetAllPaginated(page, perPage)
 }
 
 func (s *StudioService) GetStudioByID(id uint) (*models.Studio, error) {
-	var studio models.Studio
-	if err := s.DB.Preload("FacilityStudios.Facility").First(&studio, id).Error; err != nil {
-        if err == gorm.ErrRecordNotFound {
-            return nil, utils.ErrStudioNotFound
-        }
-        return nil, err
-    }
-	return &studio, nil
+	studio, err := s.StudioRepo.GetByID(id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, utils.ErrStudioNotFound
+		}
+		return nil, err
+	}
+	return studio, nil
 }
 
 func (s *StudioService) UpdateStudio(id uint, req *requests.CreateStudioRequest) error {
-	return s.DB.Transaction(func(tx *gorm.DB) error {
-		var studio models.Studio
-		if err := tx.First(&studio, id).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return utils.ErrStudioNotFound
-			}
+	studio, err := s.GetStudioByID(id)
+	if err != nil {
+		return err
+	}
+
+	count, err := s.FacilityRepo.CountFacilitiesByIDs(req.FacilityIDs)
+	if err != nil {
+		return err
+	}
+	if count != int64(len(req.FacilityIDs)) {
+		return utils.ErrInvalidFacilityIDs
+	}
+
+	studio.Name = req.Name
+	studio.SeatCapacity = req.SeatCapacity
+
+	return s.StudioRepo.WithTransaction(func(tx *gorm.DB) error {
+		if err := s.StudioRepo.UpdateWithTx(tx, studio); err != nil {
 			return err
 		}
 
-		var count int64
-		if err := tx.Model(&models.Facility{}).Where("id IN ?", req.FacilityIDs).Count(&count).Error; err != nil {
-			return err
-		}
-		if count != int64(len(req.FacilityIDs)) {
-			return utils.ErrInvalidFacilityIDs
-		}
-
-		studio.Name = req.Name
-		studio.SeatCapacity = req.SeatCapacity
-		if err := tx.Save(&studio).Error; err != nil {
-			return err
-		}
-
-		if err := tx.Where("studio_id = ?", id).Delete(&models.FacilityStudio{}).Error; err != nil {
+		if err := s.StudioRepo.DeleteFacilityStudiosWithTx(tx, id); err != nil {
 			return err
 		}
 
@@ -106,39 +98,34 @@ func (s *StudioService) UpdateStudio(id uint, req *requests.CreateStudioRequest)
 				FacilityID: fid,
 			})
 		}
-		if len(facilityStudios) > 0 {
-			if err := tx.Create(&facilityStudios).Error; err != nil {
-				return err
-			}
-		}
-		return nil
+
+		return s.StudioRepo.CreateFacilityStudiosWithTx(tx, facilityStudios)
 	})
 }
 
 func (s *StudioService) DeleteStudio(id uint) error {
-	return s.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.First(&models.Studio{}, id).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return utils.ErrStudioNotFound
-			}
-			return err
-		}
+	_, err := s.GetStudioByID(id)
+	if err != nil {
+		return err
+	}
 
-		var scheduleCount int64
-        if err := tx.Model(&models.Schedule{}).Where("studio_id = ?", id).Count(&scheduleCount).Error; err != nil {
+	scheduleCount, err := s.StudioRepo.CountSchedulesByStudioID(id)
+	if err != nil {
+		return err
+	}
+	if scheduleCount > 0 {
+		return utils.ErrStudioHasSchedules
+	}
+
+	return s.StudioRepo.WithTransaction(func(tx *gorm.DB) error {
+        if err := s.StudioRepo.DeleteFacilityStudiosWithTx(tx, id); err != nil {
             return err
         }
-        if scheduleCount > 0 {
-            return utils.ErrStudioHasSchedules
-        }
 
-		if err := tx.Where("studio_id = ?", id).Delete(&models.FacilityStudio{}).Error; err != nil {
+        if err := s.StudioRepo.DeleteWithTx(tx, id); err != nil {
             return err
         }
 
-		if err := tx.Delete(&models.Studio{}, id).Error; err != nil {
-			return err
-		}
-		return nil
-	})
+        return nil
+    })
 }

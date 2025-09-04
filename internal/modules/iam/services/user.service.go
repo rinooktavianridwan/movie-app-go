@@ -3,6 +3,7 @@ package services
 import (
 	"mime/multipart"
 	"movie-app-go/internal/models"
+	"movie-app-go/internal/modules/iam/repositories"
 	"movie-app-go/internal/modules/iam/requests"
 	"movie-app-go/internal/repository"
 	"movie-app-go/internal/utils"
@@ -13,34 +14,44 @@ import (
 )
 
 type UserService struct {
-	DB *gorm.DB
+	UserRepo *repositories.UserRepository
 }
 
-func NewUserService(db *gorm.DB) *UserService {
+func NewUserService(userRepo *repositories.UserRepository) *UserService {
 	return &UserService{
-		DB: db,
+		UserRepo: userRepo,
 	}
 }
 
 func (s *UserService) GetAllPaginated(page, perPage int) (repository.PaginationResult[models.User], error) {
-	return repository.Paginate[models.User](s.DB, page, perPage)
+	return s.UserRepo.GetAllPaginated(page, perPage)
 }
 
 func (s *UserService) GetByID(id uint) (*models.User, error) {
-	var user models.User
-	if err := s.DB.First(&user, id).Error; err != nil {
+	user, err := s.UserRepo.GetByID(id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, utils.ErrUserNotFound
+		}
 		return nil, err
 	}
-	return &user, nil
+	return user, nil
 }
 
 func (s *UserService) Update(id uint, req *requests.UserUpdateRequest) error {
-	var user models.User
-	if err := s.DB.First(&user, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return utils.ErrUserNotFound
-		}
+	user, err := s.GetByID(id)
+	if err != nil {
 		return err
+	}
+
+	if req.Email != user.Email {
+		exists, err := s.UserRepo.ExistsByEmailExceptID(req.Email, id)
+		if err != nil {
+			return err
+		}
+		if exists {
+			return utils.ErrEmailAlreadyExists
+		}
 	}
 
 	user.Name = req.Name
@@ -56,51 +67,40 @@ func (s *UserService) Update(id uint, req *requests.UserUpdateRequest) error {
 		user.IsAdmin = *req.IsAdmin
 	}
 
-	if err := s.DB.Save(&user).Error; err != nil {
-		return err
-	}
-	return nil
+	return s.UserRepo.Update(user)
 }
 
 func (s *UserService) Delete(id uint) error {
-	if err := s.DB.First(&models.User{}, id).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return utils.ErrUserNotFound
-		}
-		return err
-	}
+	_, err := s.GetByID(id)
+	if err != nil {
+        return err
+    }
 
-	if err := s.DB.Delete(&models.User{}, id).Error; err != nil {
-		return err
-	}
-	return nil
+	return s.UserRepo.Delete(id)
 }
 
 func (s *UserService) UpdateAvatar(userID uint, file *multipart.FileHeader) error {
-	var user models.User
-	if err := s.DB.First(&user, userID).Error; err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return utils.ErrUserNotFound
-		}
-		return err
-	}
+	user, err := s.GetByID(userID)
+    if err != nil {
+        return err
+    }
 
 	if user.Avatar != nil && *user.Avatar != "" {
-		utils.DeleteFile(*user.Avatar)
-	}
+        utils.DeleteFile(*user.Avatar)
+    }
 
 	avatarPath, err := utils.SaveFile(file, "uploads/avatars", "image", 5)
-	if err != nil {
-		return err
-	}
+    if err != nil {
+        return err
+    }
 
 	relativePath := strings.TrimPrefix(avatarPath, "./")
-	user.Avatar = &relativePath
+    user.Avatar = &relativePath
 
-	if err := s.DB.Save(&user).Error; err != nil {
-		utils.DeleteFile(avatarPath)
-		return err
-	}
+	if err := s.UserRepo.Update(user); err != nil {
+        utils.DeleteFile(avatarPath)
+        return err
+    }
 
-	return nil
+    return nil
 }

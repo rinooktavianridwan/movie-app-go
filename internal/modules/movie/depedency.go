@@ -3,6 +3,7 @@ package movie
 import (
 	"movie-app-go/internal/middleware"
 	"movie-app-go/internal/modules/movie/controllers"
+	"movie-app-go/internal/modules/movie/repositories"
 	"movie-app-go/internal/modules/movie/services"
 
 	"github.com/gin-gonic/gin"
@@ -14,7 +15,8 @@ type MovieModule struct {
 }
 
 func NewMovieModule(db *gorm.DB) *MovieModule {
-	movieService := services.NewMovieService(db)
+	movieRepo := repositories.NewMovieRepository(db)
+	movieService := services.NewMovieService(movieRepo)
 
 	return &MovieModule{
 		MovieController: controllers.NewMovieController(movieService),

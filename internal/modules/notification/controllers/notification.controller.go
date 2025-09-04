@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"movie-app-go/internal/constants"
-	"movie-app-go/internal/models"
 	"movie-app-go/internal/modules/notification/options"
 	"movie-app-go/internal/modules/notification/requests"
 	"movie-app-go/internal/modules/notification/responses"
@@ -254,18 +252,18 @@ func (c *NotificationController) DeleteNotification(ctx *gin.Context) {
 
 	if err := c.NotificationService.DeleteNotification(uint(id), userID); err != nil {
 		if errors.Is(err, utils.ErrNotificationNotFound) {
-            ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
-        } else {
-            ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
-        }
-        return
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+		} else {
+			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+		}
+		return
 	}
 
 	ctx.JSON(http.StatusOK, utils.SuccessResponse(
-        http.StatusOK,
-        "Notification deleted successfully",
-        nil,
-    ))
+		http.StatusOK,
+		"Notification deleted successfully",
+		nil,
+	))
 }
 
 func (c *NotificationController) CreateNotification(ctx *gin.Context) {
@@ -282,10 +280,10 @@ func (c *NotificationController) CreateNotification(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusCreated, utils.SuccessResponse(
-        http.StatusCreated,
-        "Notification created successfully",
-        nil,
-    ))
+		http.StatusCreated,
+		"Notification created successfully",
+		nil,
+	))
 }
 
 func (c *NotificationController) CreateSystemNotification(ctx *gin.Context) {
@@ -295,38 +293,15 @@ func (c *NotificationController) CreateSystemNotification(ctx *gin.Context) {
 		return
 	}
 
-	var userIDs []uint
-	err := c.NotificationService.DB.Model(&models.User{}).
-        Where("is_admin = ?", false).
-        Pluck("id", &userIDs).Error
-    if err != nil {
-        ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse("Failed to get users"))
-        return
-    }
-
-	if len(userIDs) == 0 {
-		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("No users found"))
-		return
-	}
-
-	err = c.NotificationService.CreateBulkNotifications(
-		userIDs,
-		req.Title,
-		req.Message,
-		constants.NotificationTypeSystem,
-		req.Data,
-	)
+	err := c.NotificationService.CreateSystemNotification(&req)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
 	ctx.JSON(http.StatusCreated, utils.SuccessResponse(
-        http.StatusCreated,
-        "System notification sent successfully",
-        map[string]interface{}{
-            "user_count": len(userIDs),
-            "message":    fmt.Sprintf("System notification sent to %d users", len(userIDs)),
-        },
-    ))
+		http.StatusCreated,
+		"System notification sent successfully",
+		nil,
+	))
 }

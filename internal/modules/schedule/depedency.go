@@ -3,6 +3,9 @@ package schedule
 import (
 	"movie-app-go/internal/middleware"
 	"movie-app-go/internal/modules/schedule/controllers"
+	"movie-app-go/internal/modules/schedule/repositories"
+	movierepos "movie-app-go/internal/modules/movie/repositories"
+	studiorepos "movie-app-go/internal/modules/studio/repositories"
 	"movie-app-go/internal/modules/schedule/services"
 
 	"github.com/gin-gonic/gin"
@@ -14,7 +17,10 @@ type ScheduleModule struct {
 }
 
 func NewScheduleModule(db *gorm.DB) *ScheduleModule {
-	scheduleService := services.NewScheduleService(db)
+	studioRepo := studiorepos.NewStudioRepository(db)
+	scheduleRepo := repositories.NewScheduleRepository(db)
+    movieRepo := movierepos.NewMovieRepository(db)
+	scheduleService := services.NewScheduleService(scheduleRepo, movieRepo, studioRepo)
 
 	return &ScheduleModule{
 		ScheduleController: controllers.NewScheduleController(scheduleService),

@@ -3,6 +3,7 @@ package services
 import (
 	"mime/multipart"
 	"movie-app-go/internal/models"
+	"movie-app-go/internal/modules/movie/repositories"
 	"movie-app-go/internal/modules/movie/requests"
 	"movie-app-go/internal/repository"
 	"movie-app-go/internal/utils"
@@ -12,39 +13,43 @@ import (
 )
 
 type MovieService struct {
-	DB *gorm.DB
+	MovieRepo *repositories.MovieRepository
 }
 
-func NewMovieService(db *gorm.DB) *MovieService {
-	return &MovieService{DB: db}
+func NewMovieService(movieRepo *repositories.MovieRepository) *MovieService {
+	return &MovieService{
+		MovieRepo: movieRepo,
+	}
 }
 
 func (s *MovieService) CreateMovie(req *requests.CreateMovieRequest, posterFile *multipart.FileHeader) error {
-	return s.DB.Transaction(func(tx *gorm.DB) error {
-		var count int64
-		if err := tx.Model(&models.Genre{}).Where("id IN ?", req.GenreIDs).Count(&count).Error; err != nil {
+	count, err := s.MovieRepo.CountGenresByIDs(req.GenreIDs)
+	if err != nil {
+		return err
+	}
+	if count != int64(len(req.GenreIDs)) {
+		return utils.ErrInvalidGenreIDs
+	}
+
+	var posterURL *string
+	if posterFile != nil {
+		posterPath, err := utils.SaveFile(posterFile, "uploads/posters", "image", 10)
+		if err != nil {
 			return err
 		}
-		if count != int64(len(req.GenreIDs)) {
-			return utils.ErrInvalidGenreIDs
-		}
+		relativePath := strings.TrimPrefix(posterPath, "./")
+		posterURL = &relativePath
+	}
 
-		movie := models.Movie{
-			Title:    req.Title,
-			Overview: req.Overview,
-			Duration: req.Duration,
-		}
+	movie := models.Movie{
+		Title:     req.Title,
+		Overview:  req.Overview,
+		Duration:  req.Duration,
+		PosterURL: posterURL,
+	}
 
-		if posterFile != nil {
-			posterPath, err := utils.SaveFile(posterFile, "uploads/posters", "image", 10)
-			if err != nil {
-				return err
-			}
-			relativePath := strings.TrimPrefix(posterPath, "./")
-			movie.PosterURL = &relativePath
-		}
-
-		if err := tx.Create(&movie).Error; err != nil {
+	return s.MovieRepo.WithTransaction(func(tx *gorm.DB) error {
+		if err := s.MovieRepo.CreateWithTx(tx, &movie); err != nil {
 			return err
 		}
 
@@ -55,71 +60,63 @@ func (s *MovieService) CreateMovie(req *requests.CreateMovieRequest, posterFile 
 				GenreID: gid,
 			})
 		}
-		if len(movieGenres) > 0 {
-			if err := tx.Create(&movieGenres).Error; err != nil {
-				return err
-			}
-		}
-		return nil
+
+		return s.MovieRepo.CreateMovieGenresWithTx(tx, movieGenres)
 	})
 }
 
 func (s *MovieService) GetAllMoviesPaginated(page, perPage int) (repository.PaginationResult[models.Movie], error) {
-	return repository.Paginate[models.Movie](
-		s.DB.Preload("MovieGenres.Genre"),
-		page,
-		perPage,
-	)
+	return s.MovieRepo.GetAllPaginated(page, perPage)
 }
 
 func (s *MovieService) GetMovieByID(id uint) (*models.Movie, error) {
-	var movie models.Movie
-	if err := s.DB.Preload("MovieGenres.Genre").First(&movie, id).Error; err != nil {
+	movie, err := s.MovieRepo.GetByID(id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, utils.ErrMovieNotFound
+		}
 		return nil, err
 	}
-	return &movie, nil
+	return movie, nil
 }
 
 func (s *MovieService) UpdateMovie(id uint, req *requests.UpdateMovieRequest, posterFile *multipart.FileHeader) error {
-	var movie models.Movie
-	return s.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.First(&movie, id).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return utils.ErrMovieNotFound
-			}
+	movie, err := s.GetMovieByID(id)
+	if err != nil {
+		return err
+	}
+
+	count, err := s.MovieRepo.CountGenresByIDs(req.GenreIDs)
+	if err != nil {
+		return err
+	}
+	if count != int64(len(req.GenreIDs)) {
+		return utils.ErrInvalidGenreIDs
+	}
+
+	if posterFile != nil {
+		if movie.PosterURL != nil && *movie.PosterURL != "" {
+			utils.DeleteFile(*movie.PosterURL)
+		}
+
+		posterPath, err := utils.SaveFile(posterFile, "uploads/posters", "image", 10)
+		if err != nil {
+			return err
+		}
+		relativePath := strings.TrimPrefix(posterPath, "./")
+		movie.PosterURL = &relativePath
+	}
+
+	movie.Title = req.Title
+	movie.Overview = req.Overview
+	movie.Duration = req.Duration
+
+	return s.MovieRepo.WithTransaction(func(tx *gorm.DB) error {
+		if err := s.MovieRepo.UpdateWithTx(tx, movie); err != nil {
 			return err
 		}
 
-		var count int64
-		if err := tx.Model(&models.Genre{}).Where("id IN ?", req.GenreIDs).Count(&count).Error; err != nil {
-			return err
-		}
-		if count != int64(len(req.GenreIDs)) {
-			return utils.ErrInvalidGenreIDs
-		}
-
-		movie.Title = req.Title
-		movie.Overview = req.Overview
-		movie.Duration = req.Duration
-
-		if posterFile != nil {
-			if movie.PosterURL != nil && *movie.PosterURL != "" {
-				utils.DeleteFile(*movie.PosterURL)
-			}
-
-			posterPath, err := utils.SaveFile(posterFile, "uploads/posters", "image", 10)
-			if err != nil {
-				return err
-			}
-			relativePath := strings.TrimPrefix(posterPath, "./")
-			movie.PosterURL = &relativePath
-		}
-
-		if err := tx.Save(&movie).Error; err != nil {
-			return err
-		}
-
-		if err := tx.Where("movie_id = ?", id).Delete(&models.MovieGenre{}).Error; err != nil {
+		if err := s.MovieRepo.DeleteMovieGenresWithTx(tx, movie.ID); err != nil {
 			return err
 		}
 
@@ -130,44 +127,38 @@ func (s *MovieService) UpdateMovie(id uint, req *requests.UpdateMovieRequest, po
 				GenreID: gid,
 			})
 		}
-		if len(movieGenres) > 0 {
-			if err := tx.Create(&movieGenres).Error; err != nil {
-				return err
-			}
-		}
-		return nil
+
+		return s.MovieRepo.CreateMovieGenresWithTx(tx, movieGenres)
 	})
 }
 
 func (s *MovieService) DeleteMovie(id uint) error {
-	return s.DB.Transaction(func(tx *gorm.DB) error {
-		var movie models.Movie
-		if err := tx.First(&movie, id).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return utils.ErrMovieNotFound
-			}
-			return err
-		}
+	movie, err := s.GetMovieByID(id)
+	if err != nil {
+		return err
+	}
 
-		var scheduleCount int64
-		if err := tx.Model(&models.Schedule{}).Where("movie_id = ?", id).Count(&scheduleCount).Error; err != nil {
+	return s.MovieRepo.WithTransaction(func(tx *gorm.DB) error {
+		scheduleCount, err := s.MovieRepo.CountSchedulesByMovieID(id)
+		if err != nil {
 			return err
 		}
 		if scheduleCount > 0 {
 			return utils.ErrMovieHasSchedules
 		}
 
-		if err := tx.Where("movie_id = ?", id).Delete(&models.MovieGenre{}).Error; err != nil {
-            return err
-        }
+		if err := s.MovieRepo.DeleteMovieGenresWithTx(tx, id); err != nil {
+			return err
+		}
 
 		if movie.PosterURL != nil && *movie.PosterURL != "" {
 			utils.DeleteFile(*movie.PosterURL)
 		}
 
-		if err := tx.Delete(&models.Movie{}, id).Error; err != nil {
+		if err := s.MovieRepo.DeleteWithTx(tx, id); err != nil {
 			return err
 		}
+
 		return nil
 	})
 }

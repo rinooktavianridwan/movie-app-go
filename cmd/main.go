@@ -5,7 +5,7 @@ import (
 	"movie-app-go/database"
 	"movie-app-go/internal/jobs"
 
-	// "movie-app-go/database/seed"
+	"movie-app-go/database/seed"
 	"movie-app-go/internal/modules/genre"
 	"movie-app-go/internal/modules/iam"
 	"movie-app-go/internal/modules/movie"
@@ -50,9 +50,9 @@ func main() {
 	}()
 
 	// Jalankan seeder user
-	// if err := seed.RunAllSeeders(db); err != nil {
-	// 	panic(err)
-	// }
+	if err := seed.RunAllSeeders(db); err != nil {
+		panic(err)
+	}
 
 	// Dependency injection
 	iamModule := iam.NewIAMModule(db)

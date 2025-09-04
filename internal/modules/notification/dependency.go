@@ -3,6 +3,7 @@ package notification
 import (
 	"movie-app-go/internal/middleware"
 	"movie-app-go/internal/modules/notification/controllers"
+	"movie-app-go/internal/modules/notification/repositories"
 	"movie-app-go/internal/modules/notification/services"
 
 	"github.com/gin-gonic/gin"
@@ -15,7 +16,8 @@ type NotificationModule struct {
 }
 
 func NewNotificationModule(db *gorm.DB) *NotificationModule {
-	notificationService := services.NewNotificationService(db)
+	notificationRepo := repositories.NewNotificationRepository(db)
+	notificationService := services.NewNotificationService(notificationRepo)
 	notificationController := controllers.NewNotificationController(notificationService)
 
 	return &NotificationModule{
@@ -42,6 +44,6 @@ func RegisterRoutes(rg *gin.RouterGroup, module *NotificationModule) {
 	adminNotifications.Use(middleware.AdminOnly())
 	{
 		adminNotifications.POST("", module.NotificationController.CreateNotification)
-		adminNotifications.POST("/system", module.NotificationController.CreateSystemNotification) 
+		adminNotifications.POST("/system", module.NotificationController.CreateSystemNotification)
 	}
 }

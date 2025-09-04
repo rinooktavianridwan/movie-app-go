@@ -7,7 +7,8 @@ import (
 	"log"
 
 	"movie-app-go/internal/constants"
-	"movie-app-go/internal/models"
+	"movie-app-go/internal/modules/notification/repositories"
+	"movie-app-go/internal/modules/notification/services"
 
 	"github.com/hibiken/asynq"
 	"gorm.io/gorm"
@@ -38,12 +39,15 @@ type BookingConfirmationPayload struct {
 }
 
 type NotificationJobHandler struct {
-	DB *gorm.DB
+	NotificationService *services.NotificationService
 }
 
 func NewNotificationJobHandler(db *gorm.DB) *NotificationJobHandler {
+	notificationRepo := repositories.NewNotificationRepository(db)
+	notificationService := services.NewNotificationService(notificationRepo)
+
 	return &NotificationJobHandler{
-		DB: db,
+		NotificationService: notificationService,
 	}
 }
 
@@ -55,20 +59,14 @@ func (h *NotificationJobHandler) HandleMovieReminder(ctx context.Context, t *asy
 
 	log.Printf("Processing movie reminder for user %d, movie: %s", payload.UserID, payload.MovieTitle)
 
-	notification := models.Notification{
-		UserID:  payload.UserID,
-		Title:   "Movie Reminder",
-		Message: fmt.Sprintf("Your movie '%s' is starting soon at %s", payload.MovieTitle, payload.ScheduleTime),
-		Type:    constants.NotificationTypeMovieReminder,
-		IsRead:  false,
-		Data: models.NotificationData{
-			"movie_id":      payload.MovieID,
-			"movie_title":   payload.MovieTitle,
-			"schedule_time": payload.ScheduleTime,
-		},
-	}
+	err := h.NotificationService.CreateMovieReminderNotification(
+		payload.UserID,
+		payload.MovieTitle,
+		payload.ScheduleTime,
+		payload.MovieID,
+	)
 
-	if err := h.DB.Create(&notification).Error; err != nil {
+	if err != nil {
 		log.Printf("Failed to create movie reminder notification: %v", err)
 		return err
 	}
@@ -85,23 +83,19 @@ func (h *NotificationJobHandler) HandlePromoNotification(ctx context.Context, t 
 
 	log.Printf("Processing promo notification for %d users, promo: %s", len(payload.UserIDs), payload.PromoName)
 
-	notifications := make([]models.Notification, len(payload.UserIDs))
-	for i, userID := range payload.UserIDs {
-		notifications[i] = models.Notification{
-			UserID:  userID,
-			Title:   "New Promo Available!",
-			Message: fmt.Sprintf("Check out our new promo: %s. Use code: %s", payload.PromoName, payload.PromoCode),
-			Type:    constants.NotificationTypePromoAvailable,
-			IsRead:  false,
-			Data: models.NotificationData{
-				"promo_id":   payload.PromoID,
-				"promo_name": payload.PromoName,
-				"promo_code": payload.PromoCode,
-			},
-		}
-	}
+	err := h.NotificationService.CreateBulkNotifications(
+		payload.UserIDs,
+		"New Promo Available!",
+		fmt.Sprintf("Check out our new promo: %s. Use code: %s", payload.PromoName, payload.PromoCode),
+		constants.NotificationTypePromoAvailable,
+		map[string]interface{}{
+			"promo_id":   payload.PromoID,
+			"promo_name": payload.PromoName,
+			"promo_code": payload.PromoCode,
+		},
+	)
 
-	if err := h.DB.Create(&notifications).Error; err != nil {
+	if err != nil {
 		log.Printf("Failed to create promo notifications: %v", err)
 		return err
 	}
@@ -118,20 +112,14 @@ func (h *NotificationJobHandler) HandleBookingConfirmation(ctx context.Context, 
 
 	log.Printf("Processing booking confirmation for user %d, transaction %d", payload.UserID, payload.TransactionID)
 
-	notification := models.Notification{
-		UserID:  payload.UserID,
-		Title:   "Booking Confirmed",
-		Message: fmt.Sprintf("Your booking for '%s' has been confirmed. Total: Rp %.0f", payload.MovieTitle, payload.TotalAmount),
-		Type:    constants.NotificationTypeBookingConfirm,
-		IsRead:  false,
-		Data: models.NotificationData{
-			"transaction_id": payload.TransactionID,
-			"movie_title":    payload.MovieTitle,
-			"total_amount":   payload.TotalAmount,
-		},
-	}
+	err := h.NotificationService.CreateBookingConfirmationNotification(
+		payload.UserID,
+		payload.TransactionID,
+		payload.MovieTitle,
+		payload.TotalAmount,
+	)
 
-	if err := h.DB.Create(&notification).Error; err != nil {
+	if err != nil {
 		log.Printf("Failed to create booking confirmation notification: %v", err)
 		return err
 	}

@@ -28,7 +28,7 @@ func (c *GenreController) Create(ctx *gin.Context) {
 		return
 	}
 
-	err := c.GenreService.CreateGenre(req.Name)
+	err := c.GenreService.CreateGenre(&req)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
@@ -94,7 +94,7 @@ func (c *GenreController) Update(ctx *gin.Context) {
 		return
 	}
 
-	err := c.GenreService.UpdateGenre(uint(id), req.Name)
+	err := c.GenreService.UpdateGenre(uint(id), &req)
 	if err != nil {
 		if errors.Is(err, utils.ErrGenreNotFound) {
 			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))

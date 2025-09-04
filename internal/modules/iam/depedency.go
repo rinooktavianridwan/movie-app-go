@@ -3,6 +3,7 @@ package iam
 import (
 	"movie-app-go/internal/middleware"
 	"movie-app-go/internal/modules/iam/controllers"
+	"movie-app-go/internal/modules/iam/repositories"
 	"movie-app-go/internal/modules/iam/services"
 
 	"github.com/gin-gonic/gin"
@@ -16,8 +17,10 @@ type IAMModule struct {
 
 func NewIAMModule(db *gorm.DB) *IAMModule {
 	services.InitRedis()
-	userService := services.NewUserService(db)
-	authService := services.NewAuthService(db)
+	userRepo := repositories.NewUserRepository(db)
+	authRepo := repositories.NewAuthRepository(db)
+	userService := services.NewUserService(userRepo)
+	authService := services.NewAuthService(authRepo)
 	userController := controllers.NewUserController(userService)
 	authController := controllers.NewAuthController(authService)
 	return &IAMModule{
