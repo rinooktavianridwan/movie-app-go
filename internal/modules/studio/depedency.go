@@ -27,18 +27,18 @@ func NewStudioModule(db *gorm.DB) *StudioModule {
 	}
 }
 
-func RegisterRoutes(rg *gin.RouterGroup, module *StudioModule) {
-	// Facility
-	rg.POST("/facilities", middleware.AdminOnly(), module.FacilityController.Create)
-	rg.GET("/facilities", middleware.AdminOnly(), module.FacilityController.GetAll)
-	rg.GET("/facilities/:id", middleware.AdminOnly(), module.FacilityController.GetByID)
-	rg.PUT("/facilities/:id", middleware.AdminOnly(), module.FacilityController.Update)
-	rg.DELETE("/facilities/:id", middleware.AdminOnly(), module.FacilityController.Delete)
+func RegisterRoutes(rg *gin.RouterGroup, module *StudioModule, mf *middleware.Factory) {
+    // Facility routes
+    rg.POST("/facilities", mf.Auth(), mf.RequirePermission("studios.create"), module.FacilityController.Create)
+    rg.GET("/facilities", mf.Auth(), mf.RequirePermission("studios.read"), module.FacilityController.GetAll)
+    rg.GET("/facilities/:id", mf.Auth(), mf.RequirePermission("studios.read"), module.FacilityController.GetByID)
+    rg.PUT("/facilities/:id", mf.Auth(), mf.RequirePermission("studios.update"), module.FacilityController.Update)
+    rg.DELETE("/facilities/:id", mf.Auth(), mf.RequirePermission("studios.delete"), module.FacilityController.Delete)
 
-	// Studio
-	rg.POST("/studios", middleware.AdminOnly(), module.StudioController.Create)
-	rg.GET("/studios", middleware.AdminOnly(), module.StudioController.GetAll)
-	rg.GET("/studios/:id", middleware.AdminOnly(), module.StudioController.GetByID)
-	rg.PUT("/studios/:id", middleware.AdminOnly(), module.StudioController.Update)
-	rg.DELETE("/studios/:id", middleware.AdminOnly(), module.StudioController.Delete)
+    // Studio routes
+    rg.POST("/studios", mf.Auth(), mf.RequirePermission("studios.create"), module.StudioController.Create)
+    rg.GET("/studios", module.StudioController.GetAll)
+    rg.GET("/studios/:id", module.StudioController.GetByID)
+    rg.PUT("/studios/:id", mf.Auth(), mf.RequirePermission("studios.update"), module.StudioController.Update)
+    rg.DELETE("/studios/:id", mf.Auth(), mf.RequirePermission("studios.delete"), module.StudioController.Delete)
 }

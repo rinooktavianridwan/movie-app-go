@@ -1,6 +1,8 @@
 package seed
 
 import (
+	"fmt"
+	"log"
 	"math/rand"
 	"movie-app-go/internal/models"
 
@@ -8,9 +10,7 @@ import (
 )
 
 func SeedMovieGenres(db *gorm.DB, movies []models.Movie, genres []models.Genre) error {
-	var movieGenres []models.MovieGenre
 
-	// Mapping manual untuk beberapa film populer
 	movieGenreMapping := map[string][]string{
 		"Avengers: Endgame":        {"Action", "Adventure", "Superhero"},
 		"Spider-Man: No Way Home":  {"Action", "Adventure", "Superhero"},
@@ -45,43 +45,60 @@ func SeedMovieGenres(db *gorm.DB, movies []models.Movie, genres []models.Genre) 
 		"Inside Out":                                        {"Animation", "Adventure", "Comedy", "Drama", "Family"},
 	}
 
-	// Buat map untuk genre berdasarkan nama
+	var allMovieGenres []models.MovieGenre
 	genreMap := make(map[string]uint)
 	for _, genre := range genres {
 		genreMap[genre.Name] = genre.ID
 	}
 
-	// Assign genre ke movie berdasarkan mapping
 	for _, movie := range movies {
 		if genreNames, exists := movieGenreMapping[movie.Title]; exists {
 			for _, genreName := range genreNames {
 				if genreID, genreExists := genreMap[genreName]; genreExists {
-					movieGenres = append(movieGenres, models.MovieGenre{
+					allMovieGenres = append(allMovieGenres, models.MovieGenre{
 						MovieID: movie.ID,
 						GenreID: genreID,
 					})
 				}
 			}
 		} else {
-			// Untuk movie yang tidak ada di mapping, assign random 1-3 genre
 			numGenres := rand.Intn(3) + 1
-			usedGenres := make(map[uint]bool)
-
-			for i := 0; i < numGenres && len(usedGenres) < len(genres); i++ {
-				randomGenre := genres[rand.Intn(len(genres))]
-				if !usedGenres[randomGenre.ID] {
-					movieGenres = append(movieGenres, models.MovieGenre{
-						MovieID: movie.ID,
-						GenreID: randomGenre.ID,
-					})
-					usedGenres[randomGenre.ID] = true
-				}
+			selectedGenres := rand.Perm(len(genres))[:numGenres]
+			for _, genreIndex := range selectedGenres {
+				allMovieGenres = append(allMovieGenres, models.MovieGenre{
+					MovieID: movie.ID,
+					GenreID: genres[genreIndex].ID,
+				})
 			}
 		}
 	}
 
-	if len(movieGenres) > 0 {
-		return db.Create(&movieGenres).Error
+	var existingMovieGenres []models.MovieGenre
+	if err := db.Find(&existingMovieGenres).Error; err != nil {
+		return err
 	}
+
+	existingMap := make(map[string]bool)
+	for _, existing := range existingMovieGenres {
+		key := fmt.Sprintf("%d_%d", existing.MovieID, existing.GenreID)
+		existingMap[key] = true
+	}
+
+	var newMovieGenres []models.MovieGenre
+	for _, mg := range allMovieGenres {
+		key := fmt.Sprintf("%d_%d", mg.MovieID, mg.GenreID)
+		if !existingMap[key] {
+			newMovieGenres = append(newMovieGenres, mg)
+		}
+	}
+
+	if len(newMovieGenres) > 0 {
+		if err := db.Create(&newMovieGenres).Error; err != nil {
+			return err
+		}
+		log.Printf("Successfully created %d new movie genre relationships", len(newMovieGenres))
+	}
+
+	log.Println("Movie genres seeding completed")
 	return nil
 }

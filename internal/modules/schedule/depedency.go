@@ -27,11 +27,10 @@ func NewScheduleModule(db *gorm.DB) *ScheduleModule {
 	}
 }
 
-func RegisterRoutes(rg *gin.RouterGroup, module *ScheduleModule) {
-	// Schedule routes
-	rg.POST("/schedules", middleware.AdminOnly(), module.ScheduleController.Create)
-	rg.GET("/schedules", module.ScheduleController.GetAll)      // Public untuk melihat jadwal
-	rg.GET("/schedules/:id", module.ScheduleController.GetByID) // Public untuk melihat detail jadwal
-	rg.PUT("/schedules/:id", middleware.AdminOnly(), module.ScheduleController.Update)
-	rg.DELETE("/schedules/:id", middleware.AdminOnly(), module.ScheduleController.Delete)
+func RegisterRoutes(rg *gin.RouterGroup, module *ScheduleModule, mf *middleware.Factory) {
+    rg.POST("/schedules", mf.Auth(), mf.RequirePermission("schedules.create"), module.ScheduleController.Create)
+    rg.GET("/schedules", module.ScheduleController.GetAll)
+    rg.GET("/schedules/:id", module.ScheduleController.GetByID)
+    rg.PUT("/schedules/:id", mf.Auth(), mf.RequirePermission("schedules.update"), module.ScheduleController.Update)
+    rg.DELETE("/schedules/:id", mf.Auth(), mf.RequirePermission("schedules.delete"), module.ScheduleController.Delete)
 }

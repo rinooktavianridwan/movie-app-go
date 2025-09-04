@@ -26,24 +26,26 @@ func NewNotificationModule(db *gorm.DB) *NotificationModule {
 	}
 }
 
-func RegisterRoutes(rg *gin.RouterGroup, module *NotificationModule) {
-	userNotifications := rg.Group("/notifications")
-	userNotifications.Use(middleware.Auth())
-	{
-		userNotifications.GET("", module.NotificationController.GetUserNotifications)
-		userNotifications.GET("/stats", module.NotificationController.GetNotificationStats)
-		userNotifications.GET("/:id", module.NotificationController.GetNotificationByID)
-		userNotifications.PUT("/:id/read", module.NotificationController.MarkAsRead)
-		userNotifications.PUT("/:id/unread", module.NotificationController.MarkAsUnread)
-		userNotifications.PUT("/mark-all-read", module.NotificationController.MarkAllAsRead)
-		userNotifications.PUT("/bulk-read", module.NotificationController.BulkMarkAsRead)
-		userNotifications.DELETE("/:id", module.NotificationController.DeleteNotification)
-	}
+func RegisterRoutes(rg *gin.RouterGroup, module *NotificationModule, mf *middleware.Factory) {
+    // User notification routes
+    userNotifications := rg.Group("/notifications")
+    userNotifications.Use(mf.Auth())
+    {
+        userNotifications.GET("", module.NotificationController.GetUserNotifications)
+        userNotifications.GET("/stats", module.NotificationController.GetNotificationStats)
+        userNotifications.GET("/:id", module.NotificationController.GetNotificationByID)
+        userNotifications.PUT("/:id/read", module.NotificationController.MarkAsRead)
+        userNotifications.PUT("/:id/unread", module.NotificationController.MarkAsUnread)
+        userNotifications.PUT("/mark-all-read", module.NotificationController.MarkAllAsRead)
+        userNotifications.PUT("/bulk-read", module.NotificationController.BulkMarkAsRead)
+        userNotifications.DELETE("/:id", module.NotificationController.DeleteNotification)
+    }
 
-	adminNotifications := rg.Group("/admin/notifications")
-	adminNotifications.Use(middleware.AdminOnly())
-	{
-		adminNotifications.POST("", module.NotificationController.CreateNotification)
-		adminNotifications.POST("/system", module.NotificationController.CreateSystemNotification)
-	}
+    // Admin notification routes
+    adminNotifications := rg.Group("/admin/notifications")
+    adminNotifications.Use(mf.Auth(), mf.RequirePermission("notifications.create"))
+    {
+        adminNotifications.POST("", module.NotificationController.CreateNotification)
+        adminNotifications.POST("/system", module.NotificationController.CreateSystemNotification)
+    }
 }

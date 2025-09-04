@@ -272,15 +272,15 @@ func (s *PromoService) ValidatePromo(userID uint, req *requests.ValidatePromoReq
 	}
 
 	if len(promo.PromoMovies) > 0 {
+		movieIDMap := make(map[uint]bool)
+		for _, id := range req.MovieIDs {
+			movieIDMap[id] = true
+		}
+
 		isValidForMovie := false
 		for _, pm := range promo.PromoMovies {
-			for _, movieID := range req.MovieIDs {
-				if pm.MovieID == movieID {
-					isValidForMovie = true
-					break
-				}
-			}
-			if isValidForMovie {
+			if movieIDMap[pm.MovieID] {
+				isValidForMovie = true
 				break
 			}
 		}

@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"strconv"
 
-	"movie-app-go/internal/models"
 	"movie-app-go/internal/modules/order/responses"
 	"movie-app-go/internal/modules/order/services"
 	"movie-app-go/internal/utils"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type TicketController struct {
@@ -26,7 +26,11 @@ func (c *TicketController) GetMyTickets(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	perPage, _ := strconv.Atoi(ctx.DefaultQuery("per_page", "10"))
 
-	userIDUint := uint(userID.(float64))
+	userIDUint, ok := userID.(uint)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Invalid user ID"))
+		return
+	}
 	result, err := c.TicketService.GetTicketsByUser(userIDUint, page, perPage)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
@@ -81,25 +85,31 @@ func (c *TicketController) GetByID(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("Invalid id"))
 		return
 	}
-	userID, _ := ctx.Get("user_id")
-	isAdmin, adminExists := ctx.Get("is_admin")
-
-	var ticket *models.Ticket
-	if adminExists && isAdmin.(bool) {
-		ticket, err = c.TicketService.GetTicketByID(uint(id), nil)
-	} else {
-		userIDUint := uint(userID.(float64))
-		ticket, err = c.TicketService.GetTicketByID(uint(id), &userIDUint)
+	userID, exists := ctx.Get("user_id")
+	if !exists {
+		ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("unauthenticated"))
+		return
 	}
 
+	userIDUint, ok := userID.(uint)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Invalid user ID"))
+		return
+	}
+
+	ticket, err := c.TicketService.GetTicketByID(uint(id), &userIDUint)
 	if err != nil {
-		switch {
-		case errors.Is(err, utils.ErrTicketNotFound):
-			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
-		case errors.Is(err, utils.ErrUnauthorizedAccess):
-			ctx.JSON(http.StatusForbidden, utils.ErrorResponse(http.StatusForbidden, err.Error()))
-		default:
-			ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+		if err == gorm.ErrRecordNotFound {
+			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse("ticket not found"))
+		} else {
+			switch {
+			case errors.Is(err, utils.ErrTicketNotFound):
+				ctx.JSON(http.StatusNotFound, utils.NotFoundResponse(err.Error()))
+			case errors.Is(err, utils.ErrUnauthorizedAccess):
+				ctx.JSON(http.StatusForbidden, utils.ErrorResponse(http.StatusForbidden, err.Error()))
+			default:
+				ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
+			}
 		}
 		return
 	}
@@ -149,21 +159,7 @@ func (c *TicketController) ScanTicket(ctx *gin.Context) {
 		return
 	}
 
-	userID, exists := ctx.Get("user_id")
-	isAdmin, adminExists := ctx.Get("is_admin")
-
-	if !exists {
-		ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("User not authenticated"))
-		return
-	}
-
-	if adminExists && isAdmin.(bool) {
-		err = c.TicketService.ScanTicket(uint(id), nil)
-	} else {
-		userIDUint := uint(userID.(float64))
-		err = c.TicketService.ScanTicket(uint(id), &userIDUint)
-	}
-
+	err = c.TicketService.ScanTicket(uint(id))
 	if err != nil {
 		switch {
 		case errors.Is(err, utils.ErrTicketNotFound):

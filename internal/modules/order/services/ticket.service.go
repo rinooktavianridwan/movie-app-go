@@ -54,7 +54,7 @@ func (s *TicketService) GetTicketsBySchedule(scheduleID uint, page, perPage int)
 	return s.TicketRepo.GetByScheduleIDPaginated(scheduleID, page, perPage)
 }
 
-func (s *TicketService) ScanTicket(id uint, userID *uint) error {
+func (s *TicketService) ScanTicket(id uint) error {
 	var ticket *models.Ticket
 
 	err := s.TicketRepo.WithTransaction(func(tx *gorm.DB) error {

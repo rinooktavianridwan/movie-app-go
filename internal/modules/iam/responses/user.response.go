@@ -7,13 +7,17 @@ import (
 )
 
 type UserResponse struct {
-    ID        uint    `json:"id"`
-    Name      string  `json:"name"`
-    Email     string  `json:"email"`
-    Avatar    *string `json:"avatar"`
-    IsAdmin   bool    `json:"is_admin"`
-    CreatedAt string  `json:"created_at"`
-    UpdatedAt string  `json:"updated_at"`
+	ID     uint      `json:"id"`
+	Name   string    `json:"name"`
+	Email  string    `json:"email"`
+	Avatar *string   `json:"avatar"`
+	RoleID *uint     `json:"role_id"`
+	Role   *RoleInfo `json:"role,omitempty"`
+}
+
+type RoleInfo struct {
+	ID   uint   `json:"id"`
+	Name string `json:"name"`
 }
 
 type PaginatedUserResponse struct {
@@ -35,14 +39,21 @@ func ToUserResponse(user *models.User) UserResponse {
 		avatarURL = &fullURL
 	}
 
+	var role *RoleInfo
+	if user.Role != nil {
+		role = &RoleInfo{
+			ID:   user.Role.ID,
+			Name: user.Role.Name,
+		}
+	}
+
 	return UserResponse{
-		ID:        user.ID,
-		Name:      user.Name,
-		Email:     user.Email,
-		Avatar:    avatarURL,
-		IsAdmin:   user.IsAdmin,
-		CreatedAt: user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt: user.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		ID:     user.ID,
+		Name:   user.Name,
+		Email:  user.Email,
+		Avatar: avatarURL,
+		RoleID: user.RoleID,
+		Role:   role,
 	}
 }
 

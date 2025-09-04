@@ -4,11 +4,12 @@ import "gorm.io/gorm"
 
 type User struct {
 	gorm.Model
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Name     string  `json:"name" gorm:"not null"`
+	Email    string  `json:"email" gorm:"uniqueIndex;not null"`
+	Password string  `json:"-" gorm:"not null"`
 	Avatar   *string `json:"avatar" gorm:"default:null"`
-	IsAdmin  bool   `json:"is_admin"`
+	RoleID   *uint   `json:"role_id"`
+	Role     *Role   `json:"role,omitempty" gorm:"foreignKey:RoleID"`
 
 	Transactions []Transaction `gorm:"foreignKey:UserID" json:"transactions,omitempty"`
 }

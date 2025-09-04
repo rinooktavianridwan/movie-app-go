@@ -11,32 +11,68 @@ import (
 )
 
 type IAMModule struct {
-	UserController *controllers.UserController
-	AuthController *controllers.AuthController
+	UserController       *controllers.UserController
+	AuthController       *controllers.AuthController
+	RoleController       *controllers.RoleController
+	PermissionController *controllers.PermissionController
+	PermissionRepo       *repositories.PermissionRepository
 }
 
 func NewIAMModule(db *gorm.DB) *IAMModule {
 	services.InitRedis()
+
 	userRepo := repositories.NewUserRepository(db)
 	authRepo := repositories.NewAuthRepository(db)
+	roleRepo := repositories.NewRoleRepository(db)
+	permissionRepo := repositories.NewPermissionRepository(db)
+
 	userService := services.NewUserService(userRepo)
-	authService := services.NewAuthService(authRepo)
+	authService := services.NewAuthService(authRepo, roleRepo)
+	roleService := services.NewRoleService(roleRepo)
+	permissionService := services.NewPermissionService(permissionRepo)
+
 	userController := controllers.NewUserController(userService)
 	authController := controllers.NewAuthController(authService)
+	roleController := controllers.NewRoleController(roleService)
+	permissionController := controllers.NewPermissionController(permissionService)
+
 	return &IAMModule{
-		UserController: userController,
-		AuthController: authController,
+		UserController:       userController,
+		AuthController:       authController,
+		RoleController:       roleController,
+		PermissionController: permissionController,
+		PermissionRepo:       permissionRepo,
 	}
 }
 
-func RegisterRoutes(r *gin.RouterGroup, iam *IAMModule) {
-	r.GET("/users", middleware.AdminOnly(), iam.UserController.GetAll)
-	r.GET("/users/:id", middleware.AdminOnly(), iam.UserController.GetByID)
-	r.PUT("/users/:id", middleware.AdminOnly(), iam.UserController.Update)
-	r.PUT("/users/upload-avatar", middleware.Auth(), iam.UserController.UploadAvatar)
-	r.DELETE("/users/:id", middleware.AdminOnly(), iam.UserController.Delete)
+func RegisterRoutes(rg *gin.RouterGroup, module *IAMModule, mf *middleware.Factory) {
+	auth := rg.Group("/auth")
+	{
+		auth.POST("/register", module.AuthController.Register)
+		auth.POST("/login", module.AuthController.Login)
+		auth.POST("/logout", mf.Auth(), module.AuthController.Logout)
+	}
 
-	r.POST("/auth/register", iam.AuthController.Register)
-	r.POST("/auth/login", iam.AuthController.Login)
-	r.POST("/auth/logout", middleware.Auth(), iam.AuthController.Logout)
+	users := rg.Group("/users", mf.Auth())
+	{
+		users.GET("", mf.RequirePermission("users.read"), module.UserController.GetAll)
+		users.GET("/:id", mf.RequirePermission("users.read"), module.UserController.GetByID)
+		users.PUT("/:id", mf.RequirePermission("users.update"), module.UserController.Update)
+		users.DELETE("/:id", mf.RequirePermission("users.delete"), module.UserController.Delete)
+		users.POST("/avatar/upload", module.UserController.UploadAvatar)
+	}
+
+	roles := rg.Group("/roles", mf.Auth())
+	{
+		roles.GET("", mf.RequirePermission("roles.read"), module.RoleController.GetAllRoles)
+		roles.GET("/:id", mf.RequirePermission("roles.read"), module.RoleController.GetRoleByID)
+	}
+
+	permissions := rg.Group("/permissions", mf.Auth())
+	{
+		permissions.GET("", mf.RequirePermission("roles.read"), module.PermissionController.GetAll)
+		permissions.GET("/grouped", mf.RequirePermission("roles.read"), module.PermissionController.GetAllGroupedByResource)
+		permissions.GET("/resource/:resource", mf.RequirePermission("roles.read"), module.PermissionController.GetByResource)
+		permissions.GET("/:id", mf.RequirePermission("roles.read"), module.PermissionController.GetByID)
+	}
 }

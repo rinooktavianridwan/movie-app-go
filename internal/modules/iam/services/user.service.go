@@ -63,8 +63,8 @@ func (s *UserService) Update(id uint, req *requests.UserUpdateRequest) error {
 		}
 		user.Password = string(hashed)
 	}
-	if req.IsAdmin != nil {
-		user.IsAdmin = *req.IsAdmin
+	if req.RoleID != nil {
+		user.RoleID = req.RoleID
 	}
 
 	return s.UserRepo.Update(user)
@@ -73,34 +73,34 @@ func (s *UserService) Update(id uint, req *requests.UserUpdateRequest) error {
 func (s *UserService) Delete(id uint) error {
 	_, err := s.GetByID(id)
 	if err != nil {
-        return err
-    }
+		return err
+	}
 
 	return s.UserRepo.Delete(id)
 }
 
 func (s *UserService) UpdateAvatar(userID uint, file *multipart.FileHeader) error {
 	user, err := s.GetByID(userID)
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
 
 	if user.Avatar != nil && *user.Avatar != "" {
-        utils.DeleteFile(*user.Avatar)
-    }
+		utils.DeleteFile(*user.Avatar)
+	}
 
 	avatarPath, err := utils.SaveFile(file, "uploads/avatars", "image", 5)
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
 
 	relativePath := strings.TrimPrefix(avatarPath, "./")
-    user.Avatar = &relativePath
+	user.Avatar = &relativePath
 
 	if err := s.UserRepo.Update(user); err != nil {
-        utils.DeleteFile(avatarPath)
-        return err
-    }
+		utils.DeleteFile(avatarPath)
+		return err
+	}
 
-    return nil
+	return nil
 }
