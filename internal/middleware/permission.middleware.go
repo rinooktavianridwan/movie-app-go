@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"movie-app-go/internal/utils"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -10,14 +11,14 @@ func RequirePermission(permission string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		permissionsInterface, exists := c.Get("permissions")
 		if !exists {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized - no permissions in token"})
+			c.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("No permissions in token"))
 			c.Abort()
 			return
 		}
 
 		permissions, ok := permissionsInterface.([]interface{})
 		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid permissions format in token"})
+			c.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Invalid permissions format in token"))
 			c.Abort()
 			return
 		}
@@ -29,10 +30,7 @@ func RequirePermission(permission string) gin.HandlerFunc {
 			}
 		}
 
-		c.JSON(http.StatusForbidden, gin.H{
-			"error":               "Insufficient permissions",
-			"required_permission": permission,
-		})
+		c.JSON(http.StatusForbidden, utils.ForbiddenResponse("Insufficient permissions: "+permission))
 		c.Abort()
 	}
 }

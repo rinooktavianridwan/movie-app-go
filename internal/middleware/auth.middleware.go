@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"movie-app-go/internal/modules/iam/services"
+	"movie-app-go/internal/utils"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -15,14 +16,14 @@ func Auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header missing"})
+			c.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Authorization header missing"))
 			c.Abort()
 			return
 		}
 
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid authorization header"})
+			c.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Invalid authorization header"))
 			c.Abort()
 			return
 		}
@@ -37,26 +38,26 @@ func Auth() gin.HandlerFunc {
 			return []byte(secret), nil
 		})
 		if err != nil || !token.Valid {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
+			c.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Invalid token"))
 			c.Abort()
 			return
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
 		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
+			c.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Invalid token claims"))
 			c.Abort()
 			return
 		}
 
 		blacklisted, err := services.IsTokenBlacklisted(tokenString)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Token check failed"})
+			c.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse("Token check failed"))
 			c.Abort()
 			return
 		}
 		if blacklisted {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Token has been logged out"})
+			c.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Token has been logged out"))
 			c.Abort()
 			return
 		}

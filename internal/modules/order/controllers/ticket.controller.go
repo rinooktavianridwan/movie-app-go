@@ -26,7 +26,11 @@ func (c *TicketController) GetMyTickets(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	perPage, _ := strconv.Atoi(ctx.DefaultQuery("per_page", "10"))
 
-	userIDUint := uint(userID.(float64))
+	userIDUint, ok := userID.(uint)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Invalid user ID"))
+		return
+	}
 	result, err := c.TicketService.GetTicketsByUser(userIDUint, page, perPage)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
@@ -88,7 +92,11 @@ func (c *TicketController) GetByID(ctx *gin.Context) {
 	if adminExists && isAdmin.(bool) {
 		ticket, err = c.TicketService.GetTicketByID(uint(id), nil)
 	} else {
-		userIDUint := uint(userID.(float64))
+		userIDUint, ok := userID.(uint)
+		if !ok {
+			ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Invalid user ID"))
+			return
+		}
 		ticket, err = c.TicketService.GetTicketByID(uint(id), &userIDUint)
 	}
 
@@ -160,7 +168,11 @@ func (c *TicketController) ScanTicket(ctx *gin.Context) {
 	if adminExists && isAdmin.(bool) {
 		err = c.TicketService.ScanTicket(uint(id), nil)
 	} else {
-		userIDUint := uint(userID.(float64))
+		userIDUint, ok := userID.(uint)
+		if !ok {
+			ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Invalid user ID"))
+			return
+		}
 		err = c.TicketService.ScanTicket(uint(id), &userIDUint)
 	}
 

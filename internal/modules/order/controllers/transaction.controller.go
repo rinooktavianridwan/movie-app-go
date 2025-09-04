@@ -32,7 +32,11 @@ func (c *TransactionController) Create(ctx *gin.Context) {
 		return
 	}
 
-	userIDUint := uint(userID.(float64))
+	userIDUint, ok := userID.(uint)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Invalid user ID"))
+		return
+	}
 	err := c.TransactionService.CreateTransaction(userIDUint, &req)
 	if err != nil {
 		switch {
@@ -62,7 +66,11 @@ func (c *TransactionController) GetMyTransactions(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.DefaultQuery("page", "1"))
 	perPage, _ := strconv.Atoi(ctx.DefaultQuery("per_page", "10"))
 
-	userIDUint := uint(userID.(float64))
+	userIDUint, ok := userID.(uint)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Invalid user ID"))
+		return
+	}
 	result, err := c.TransactionService.GetTransactionsByUser(userIDUint, page, perPage)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
@@ -130,7 +138,11 @@ func (c *TransactionController) GetByID(ctx *gin.Context) {
 	if adminExists && isAdmin.(bool) {
 		transaction, err = c.TransactionService.GetTransactionByID(uint(id), nil)
 	} else {
-		userIDUint := uint(userID.(float64))
+		userIDUint, ok := userID.(uint)
+		if !ok {
+			ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Invalid user ID"))
+			return
+		}
 		transaction, err = c.TransactionService.GetTransactionByID(uint(id), &userIDUint)
 	}
 

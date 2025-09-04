@@ -18,9 +18,11 @@ func NewAuthRepository(db *gorm.DB) *AuthRepository {
 
 func (r *AuthRepository) GetUserByEmail(email string) (*models.User, error) {
 	var user models.User
-	if err := r.DB.Where("email = ?", email).First(&user).Error; err != nil {
-		return nil, err
-	}
+	err := r.DB.Preload("Role.Permissions").Where("email = ?", email).First(&user).Error
+    if err != nil {
+        return nil, err
+    }
+
 	return &user, nil
 }
 

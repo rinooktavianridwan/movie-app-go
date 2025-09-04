@@ -123,8 +123,12 @@ func (c *UserController) UploadAvatar(ctx *gin.Context) {
 		return
 	}
 
-	userIDFloat := uint(userID.(float64))
-	err = c.Service.UpdateAvatar(userIDFloat, file)
+	userIDUint, ok := userID.(uint)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Invalid user ID"))
+		return
+	}
+	err = c.Service.UpdateAvatar(userIDUint, file)
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return

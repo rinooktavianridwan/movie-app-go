@@ -59,7 +59,7 @@ func RegisterRoutes(rg *gin.RouterGroup, module *IAMModule, mf *middleware.Facto
 		users.GET("/:id", mf.RequirePermission("users.read"), module.UserController.GetByID)
 		users.PUT("/:id", mf.RequirePermission("users.update"), module.UserController.Update)
 		users.DELETE("/:id", mf.RequirePermission("users.delete"), module.UserController.Delete)
-		users.POST("/:id/avatar", module.UserController.UploadAvatar)
+		users.POST("/avatar/upload", module.UserController.UploadAvatar)
 	}
 
 	roles := rg.Group("/roles", mf.Auth())
