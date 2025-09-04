@@ -164,10 +164,7 @@ func (s *TransactionService) GetAllTransactions(page, perPage int) (repository.P
 }
 
 func (s *TransactionService) GetTransactionByID(id uint, userID *uint) (*models.Transaction, error) {
-	if userID != nil {
-		return s.TransactionRepo.GetByIDWithUserFilter(id, *userID)
-	}
-	return s.TransactionRepo.GetByID(id)
+	return s.TransactionRepo.GetByIDWithUserFilter(id, *userID)
 }
 
 func (s *TransactionService) ProcessPayment(id uint, req *requests.ProcessPaymentRequest) error {

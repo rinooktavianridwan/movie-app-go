@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strconv"
 
-	"movie-app-go/internal/models"
 	"movie-app-go/internal/modules/order/requests"
 	"movie-app-go/internal/modules/order/responses"
 	"movie-app-go/internal/modules/order/services"
@@ -127,25 +126,18 @@ func (c *TransactionController) GetByID(ctx *gin.Context) {
 	}
 
 	userID, exists := ctx.Get("user_id")
-	isAdmin, adminExists := ctx.Get("is_admin")
-
 	if !exists {
 		ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("unauthenticated"))
 		return
 	}
 
-	var transaction *models.Transaction
-	if adminExists && isAdmin.(bool) {
-		transaction, err = c.TransactionService.GetTransactionByID(uint(id), nil)
-	} else {
-		userIDUint, ok := userID.(uint)
-		if !ok {
-			ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Invalid user ID"))
-			return
-		}
-		transaction, err = c.TransactionService.GetTransactionByID(uint(id), &userIDUint)
+	userIDUint, ok := userID.(uint)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, utils.UnauthorizedResponse("Invalid user ID"))
+		return
 	}
 
+	transaction, err := c.TransactionService.GetTransactionByID(uint(id), &userIDUint)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			ctx.JSON(http.StatusNotFound, utils.NotFoundResponse("transaction not found"))
