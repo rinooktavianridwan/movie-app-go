@@ -43,16 +43,18 @@ func NewOrderModule(db *gorm.DB, queueService *jobs.QueueService, promoService *
 	}
 }
 
-func RegisterRoutes(rg *gin.RouterGroup, module *OrderModule) {
-	rg.POST("/transactions", middleware.Auth(), module.TransactionController.Create)
-	rg.GET("/transactions/my", middleware.Auth(), module.TransactionController.GetMyTransactions)
-	rg.GET("/transactions", middleware.AdminOnly(), module.TransactionController.GetAll)
-	rg.GET("/transactions/:id", middleware.Auth(), module.TransactionController.GetByID)
-	rg.POST("/transactions/:id/payment", middleware.AdminOnly(), module.TransactionController.ProcessPayment)
+func RegisterRoutes(rg *gin.RouterGroup, module *OrderModule, mf *middleware.Factory) {
+	// Transaction routes
+	rg.POST("/transactions", mf.Auth(), module.TransactionController.Create)
+	rg.GET("/transactions/my", mf.Auth(), module.TransactionController.GetMyTransactions)
+	rg.GET("/transactions", mf.Auth(), mf.RequirePermission("orders.read"), module.TransactionController.GetAll)
+	rg.GET("/transactions/:id", mf.Auth(), module.TransactionController.GetByID)
+	rg.POST("/transactions/:id/payment", mf.Auth(), mf.RequirePermission("orders.update"), module.TransactionController.ProcessPayment)
 
-	rg.GET("/tickets/my", middleware.Auth(), module.TicketController.GetMyTickets)
-	rg.GET("/tickets", middleware.AdminOnly(), module.TicketController.GetAll)
-	rg.GET("/tickets/:id", middleware.Auth(), module.TicketController.GetByID)
-	rg.GET("/tickets/by-schedule/:schedule_id", middleware.AdminOnly(), module.TicketController.GetBySchedule)
-	rg.POST("/tickets/:id/scan", middleware.Auth(), module.TicketController.ScanTicket)
+	// Ticket routes
+	rg.GET("/tickets/my", mf.Auth(), module.TicketController.GetMyTickets)
+	rg.GET("/tickets", mf.Auth(), mf.RequirePermission("orders.read"), module.TicketController.GetAll)
+	rg.GET("/tickets/:id", mf.Auth(), module.TicketController.GetByID)
+	rg.GET("/tickets/by-schedule/:schedule_id", mf.Auth(), mf.RequirePermission("orders.read"), module.TicketController.GetBySchedule)
+	rg.POST("/tickets/:id/scan", mf.Auth(), module.TicketController.ScanTicket)
 }

@@ -23,10 +23,10 @@ func NewMovieModule(db *gorm.DB) *MovieModule {
 	}
 }
 
-func RegisterRoutes(rg *gin.RouterGroup, module *MovieModule) {
-	rg.POST("/movies", middleware.AdminOnly(), module.MovieController.Create)
-	rg.GET("/movies", module.MovieController.GetAll)
-	rg.GET("/movies/:id", module.MovieController.GetByID)
-	rg.PUT("/movies/:id", middleware.AdminOnly(), module.MovieController.Update)
-	rg.DELETE("/movies/:id", middleware.AdminOnly(), module.MovieController.Delete)
+func RegisterRoutes(rg *gin.RouterGroup, module *MovieModule, mf *middleware.Factory) {
+    rg.POST("/movies", mf.Auth(), mf.RequirePermission("movies.create"), module.MovieController.Create)
+    rg.GET("/movies", module.MovieController.GetAll)
+    rg.GET("/movies/:id", module.MovieController.GetByID)
+    rg.PUT("/movies/:id", mf.Auth(), mf.RequirePermission("movies.update"), module.MovieController.Update)
+    rg.DELETE("/movies/:id", mf.Auth(), mf.RequirePermission("movies.delete"), module.MovieController.Delete)
 }

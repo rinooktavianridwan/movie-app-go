@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"movie-app-go/database"
 	"movie-app-go/internal/jobs"
+	"movie-app-go/internal/middleware"
 
 	"movie-app-go/database/seed"
 	"movie-app-go/internal/modules/genre"
@@ -56,6 +57,7 @@ func main() {
 
 	// Dependency injection
 	iamModule := iam.NewIAMModule(db)
+	middlewareFactory := middleware.NewFactory()
 	studioModule := studio.NewStudioModule(db)
 	movieModule := movie.NewMovieModule(db)
 	genreModule := genre.NewGenreModule(db)
@@ -72,15 +74,15 @@ func main() {
 
 	api := r.Group("/api")
 	{
-		iam.RegisterRoutes(api, iamModule)
-		studio.RegisterRoutes(api, studioModule)
-		movie.RegisterRoutes(api, movieModule)
-		genre.RegisterRoutes(api, genreModule)
-		schedule.RegisterRoutes(api, scheduleModule)
-		promo.RegisterRoutes(api, promoModule)
-		notification.RegisterRoutes(api, notificationModule)
-		order.RegisterRoutes(api, orderModule)
-		report.RegisterRoutes(api, reportModule)
+		iam.RegisterRoutes(api, iamModule, middlewareFactory)
+		studio.RegisterRoutes(api, studioModule, middlewareFactory)
+		movie.RegisterRoutes(api, movieModule, middlewareFactory)
+		genre.RegisterRoutes(api, genreModule, middlewareFactory)
+		schedule.RegisterRoutes(api, scheduleModule, middlewareFactory)
+		promo.RegisterRoutes(api, promoModule, middlewareFactory)
+		notification.RegisterRoutes(api, notificationModule, middlewareFactory)
+		order.RegisterRoutes(api, orderModule, middlewareFactory)
+		report.RegisterRoutes(api, reportModule, middlewareFactory)
 	}
 
 	// Run server

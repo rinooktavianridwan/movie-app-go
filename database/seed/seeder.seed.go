@@ -7,6 +7,30 @@ import (
 )
 
 func RunAllSeeders(db *gorm.DB) error {
+	// Seed Roles first (needed by users)
+    if err := SeedRoles(db); err != nil {
+        log.Println("SeedRoles error:", err)
+        return err
+    }
+
+    // Seed Permissions
+    if err := SeedPermissions(db); err != nil {
+        log.Println("SeedPermissions error:", err)
+        return err
+    }
+
+    // Seed Role Permissions
+    if err := SeedRolePermissions(db); err != nil {
+        log.Println("SeedRolePermissions error:", err)
+        return err
+    }
+
+	// Seed Users
+	if err := SeedUsers(db); err != nil {
+		log.Println("SeedUsers error:", err)
+		return err
+	}
+
 	// Seed Facilities
 	facilities, err := SeedFacilities(db)
 	if err != nil {
@@ -24,12 +48,6 @@ func RunAllSeeders(db *gorm.DB) error {
 	// Seed FacilityStudios (relasi)
 	if err := SeedFacilityStudios(db, studios, facilities); err != nil {
 		log.Println("SeedFacilityStudios error:", err)
-		return err
-	}
-
-	// Seed Users
-	if err := SeedUsers(db); err != nil {
-		log.Println("SeedUsers error:", err)
 		return err
 	}
 

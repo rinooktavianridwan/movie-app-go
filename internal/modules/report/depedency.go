@@ -23,11 +23,18 @@ func NewReportModule(db *gorm.DB) *ReportModule {
 	}
 }
 
-func RegisterRoutes(rg *gin.RouterGroup, module *ReportModule) {
-	rg.GET("/reports/daily/all", middleware.AdminOnly(), module.ReportController.GetDailyReportAll)
-	rg.GET("/reports/daily/movie", middleware.AdminOnly(), module.ReportController.GetDailyReportByMovie)
-	rg.GET("/reports/daily/studio", middleware.AdminOnly(), module.ReportController.GetDailyReportByStudio)
-	rg.GET("/reports/monthly/all", middleware.AdminOnly(), module.ReportController.GetMonthlyReportAll)
-	rg.GET("/reports/monthly/movie", middleware.AdminOnly(), module.ReportController.GetMonthlyReportByMovie)
-	rg.GET("/reports/monthly/studio", middleware.AdminOnly(), module.ReportController.GetMonthlyReportByStudio)
+func RegisterRoutes(rg *gin.RouterGroup, module *ReportModule, mf *middleware.Factory) {
+    reports := rg.Group("/reports")
+    reports.Use(mf.Auth(), mf.RequirePermission("reports.view"))
+    {
+        // Daily reports
+        reports.GET("/daily", module.ReportController.GetDailyReportAll)
+        reports.GET("/daily/movies", module.ReportController.GetDailyReportByMovie)
+        reports.GET("/daily/studios", module.ReportController.GetDailyReportByStudio)
+        
+        // Monthly reports
+        reports.GET("/monthly", module.ReportController.GetMonthlyReportAll)
+        reports.GET("/monthly/movies", module.ReportController.GetMonthlyReportByMovie)
+        reports.GET("/monthly/studios", module.ReportController.GetMonthlyReportByStudio)
+    }
 }

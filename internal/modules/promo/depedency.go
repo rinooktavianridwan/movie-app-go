@@ -34,11 +34,11 @@ func NewPromoModule(db *gorm.DB) *PromoModule {
 	}
 }
 
-func RegisterRoutes(rg *gin.RouterGroup, module *PromoModule) {
-	rg.POST("/promos", middleware.AdminOnly(), module.PromoController.Create)
-	rg.GET("/promos", middleware.Auth(), module.PromoController.GetAllPromos)
-	rg.GET("/promos/:id", middleware.Auth(), module.PromoController.GetPromoByID)
-	rg.PUT("/promos/:id", middleware.AdminOnly(), module.PromoController.Update)
-	rg.POST("/promos/:id/toggle", middleware.AdminOnly(), module.PromoController.TogglePromoStatus)
-	rg.DELETE("/promos/:id", middleware.AdminOnly(), module.PromoController.Delete)
+func RegisterRoutes(rg *gin.RouterGroup, module *PromoModule, mf *middleware.Factory) {
+	rg.POST("/promos", mf.Auth(), mf.RequirePermission("promos.create"), module.PromoController.Create)
+	rg.GET("/promos", mf.Auth(), module.PromoController.GetAllPromos)
+	rg.GET("/promos/:id", mf.Auth(), module.PromoController.GetPromoByID)
+	rg.PUT("/promos/:id", mf.Auth(), mf.RequirePermission("promos.update"), module.PromoController.Update)
+	rg.POST("/promos/:id/toggle", mf.Auth(), mf.RequirePermission("promos.update"), module.PromoController.TogglePromoStatus)
+	rg.DELETE("/promos/:id", mf.Auth(), mf.RequirePermission("promos.delete"), module.PromoController.Delete)
 }

@@ -16,55 +16,74 @@ import (
 
 type AuthService struct {
 	AuthRepo *repositories.AuthRepository
+	RoleRepo *repositories.RoleRepository
 }
 
-func NewAuthService(authRepo *repositories.AuthRepository) *AuthService {
-	return &AuthService{AuthRepo: authRepo}
+func NewAuthService(authRepo *repositories.AuthRepository, roleRepo *repositories.RoleRepository) *AuthService {
+	return &AuthService{
+		AuthRepo: authRepo,
+		RoleRepo: roleRepo,
+	}
 }
 
 func (s *AuthService) Register(req *requests.RegisterRequest) error {
 	exists, err := s.AuthRepo.ExistsByEmail(req.Email)
-    if err != nil {
-        return err
-    }
-    if exists {
-        return utils.ErrEmailAlreadyExists
-    }
+	if err != nil {
+		return err
+	}
+	if exists {
+		return utils.ErrEmailAlreadyExists
+	}
 
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-    if err != nil {
-        return err
-    }
+	if err != nil {
+		return err
+	}
+
+	var roleID *uint
+	if req.RoleID != nil {
+		role, err := s.RoleRepo.GetByID(*req.RoleID)
+		if err != nil {
+			return fmt.Errorf("role not found: %w", err)
+		}
+		roleID = &role.ID
+	} else {
+		customerRole, err := s.RoleRepo.GetByName("customer")
+		if err != nil {
+			return fmt.Errorf("customer role not found: %w", err)
+		}
+		roleID = &customerRole.ID
+	}
 
 	user := models.User{
-        Name:     req.Name,
-        Email:    req.Email,
-        Password: string(hashedPassword),
-        IsAdmin:  false,
-    }
+		Name:     req.Name,
+		Email:    req.Email,
+		Password: string(hashedPassword),
+		RoleID:   roleID,
+	}
 
 	return s.AuthRepo.Create(&user)
 }
 
 func (s *AuthService) Login(req *requests.LoginRequest) (*models.User, string, error) {
 	user, err := s.AuthRepo.GetUserByEmail(req.Email)
-    if err != nil {
-        if err == gorm.ErrRecordNotFound {
-            return nil, "", utils.ErrInvalidCredentials
-        }
-        return nil, "", err
-    }
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, "", utils.ErrInvalidCredentials
+		}
+		return nil, "", err
+	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
-        return nil, "", utils.ErrInvalidCredentials
-    }
+		return nil, "", utils.ErrInvalidCredentials
+	}
 
 	token, err := s.generateJWT(user)
-    if err != nil {
-        return nil, "", err
-    }
+	if err != nil {
+		return nil, "", err
+	}
 
-    return user, token, nil
+	return user, token, nil
 }
 
 func (s *AuthService) Logout(tokenString string) error {
@@ -90,13 +109,28 @@ func (s *AuthService) Logout(tokenString string) error {
 }
 
 func (s *AuthService) generateJWT(user *models.User) (string, error) {
-    claims := jwt.MapClaims{
-        "user_id":  user.ID,
-        "email":    user.Email,
-        "is_admin": user.IsAdmin,
-        "exp":      time.Now().Add(time.Hour * 24).Unix(),
-    }
+	var roleName string
+	var roleID *uint
+	var permissions []string
 
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    return token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+	if user.Role != nil {
+		roleName = user.Role.Name
+		roleID = &user.Role.ID
+
+		for _, p := range user.Role.Permissions {
+			permissions = append(permissions, p.Name)
+		}
+	}
+
+	claims := jwt.MapClaims{
+		"user_id":     user.ID,
+		"email":       user.Email,
+		"role_id":     roleID,
+		"role_name":   roleName,
+		"permissions": permissions,
+		"exp":         time.Now().Add(time.Hour * 24).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(os.Getenv("JWT_SECRET")))
 }

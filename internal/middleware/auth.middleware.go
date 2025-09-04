@@ -5,12 +5,13 @@ import (
 	"os"
 	"strings"
 
+	"movie-app-go/internal/modules/iam/services"
+
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
-	"movie-app-go/internal/modules/iam/services"
 )
 
-func AdminOnly() gin.HandlerFunc {
+func Auth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -42,8 +43,8 @@ func AdminOnly() gin.HandlerFunc {
 		}
 
 		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok || claims["is_admin"] == nil || claims["is_admin"] == false {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Admin only"})
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
 			c.Abort()
 			return
 		}
@@ -60,8 +61,11 @@ func AdminOnly() gin.HandlerFunc {
 			return
 		}
 
-		c.Set("user_id", claims["user_id"])
-		c.Set("is_admin", claims["is_admin"])
+		c.Set("user_id", uint(claims["user_id"].(float64)))
+		c.Set("role_id", claims["role_id"])
+		c.Set("role_name", claims["role_name"])
+		c.Set("permissions", claims["permissions"])
+
 		c.Next()
 	}
 }
