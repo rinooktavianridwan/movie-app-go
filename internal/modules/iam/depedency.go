@@ -26,7 +26,7 @@ func NewIAMModule(db *gorm.DB) *IAMModule {
 	roleRepo := repositories.NewRoleRepository(db)
 	permissionRepo := repositories.NewPermissionRepository(db)
 
-	userService := services.NewUserService(userRepo)
+	userService := services.NewUserService(userRepo, authRepo, roleRepo)
 	authService := services.NewAuthService(authRepo, roleRepo)
 	roleService := services.NewRoleService(roleRepo)
 	permissionService := services.NewPermissionService(permissionRepo)
@@ -60,6 +60,9 @@ func RegisterRoutes(rg *gin.RouterGroup, module *IAMModule, mf *middleware.Facto
 		users.PUT("/:id", mf.RequirePermission("users.update"), module.UserController.Update)
 		users.DELETE("/:id", mf.RequirePermission("users.delete"), module.UserController.Delete)
 		users.POST("/avatar/upload", module.UserController.UploadAvatar)
+		users.GET("/import/template/excel", module.UserController.DownloadImportTemplate)
+		users.POST("/import/excel", mf.RequirePermission("users.create"), module.UserController.ImportUserExcel)
+		users.GET("/export/excel", mf.RequirePermission("users.read"), module.UserController.ExportUsers)
 	}
 
 	roles := rg.Group("/roles", mf.Auth())

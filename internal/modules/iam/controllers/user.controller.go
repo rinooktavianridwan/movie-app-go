@@ -7,6 +7,8 @@ import (
 	"movie-app-go/internal/modules/iam/services"
 	"movie-app-go/internal/utils"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -139,4 +141,52 @@ func (c *UserController) UploadAvatar(ctx *gin.Context) {
 		"Avatar berhasil diupload",
 		nil,
 	))
+}
+
+func (c *UserController) DownloadImportTemplate(ctx *gin.Context) {
+	templatePath := filepath.Join("internal", "modules", "iam", "templates", "User.xlsx")
+
+	if _, err := os.Stat(templatePath); os.IsNotExist(err) {
+		ctx.JSON(http.StatusNotFound, gin.H{"message": "template file tidak ditemukan"})
+		return
+	}
+
+	ctx.Header("Content-Description", "File Transfer")
+	ctx.Header("Content-Disposition", "attachment; filename=users_import_template.xlsx")
+	ctx.File(templatePath)
+}
+
+func (c *UserController) ImportUserExcel(ctx *gin.Context) {
+    file, err := ctx.FormFile("file")
+    if err != nil {
+        ctx.JSON(http.StatusBadRequest, gin.H{"message": "file diperlukan"})
+        return
+    }
+
+    err = c.Service.ImportFileExcel(file)
+    if err != nil {
+        ctx.JSON(http.StatusBadRequest, gin.H{
+            "message": "gagal parsing file",
+            "error": err.Error(),
+        })
+        return
+    }
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Import User Berhasil",
+		nil,
+	))
+}
+
+func (c *UserController) ExportUsers(ctx *gin.Context) {
+    file, err := c.Service.ExportUsersExcel()
+    if err != nil {
+        ctx.JSON(http.StatusInternalServerError, gin.H{"message": "gagal export users", "error": err.Error()})
+        return
+    }
+
+    ctx.Header("Content-Description", "File Transfer")
+    ctx.Header("Content-Disposition", "attachment; filename=users_export.xlsx")
+    ctx.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file)
 }
