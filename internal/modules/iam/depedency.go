@@ -61,7 +61,8 @@ func RegisterRoutes(rg *gin.RouterGroup, module *IAMModule, mf *middleware.Facto
 		users.DELETE("/:id", mf.RequirePermission("users.delete"), module.UserController.Delete)
 		users.POST("/avatar/upload", module.UserController.UploadAvatar)
 		users.GET("/import/template/excel", module.UserController.DownloadImportTemplate)
-		users.POST("/import/excel", mf.RequirePermission("users.create"), module.UserController.ImportUserExcel)
+		users.POST("/import/excel/single", mf.RequirePermission("users.create"), module.UserController.ImportUserExcelSingleSheet)
+		users.POST("/import/excel/multiple", mf.RequirePermission("users.create"), module.UserController.ImportUserExcelMultiSheet)
 		users.GET("/export/excel", mf.RequirePermission("users.read"), module.UserController.ExportUsers)
 	}
 

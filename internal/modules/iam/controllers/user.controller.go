@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -156,21 +157,56 @@ func (c *UserController) DownloadImportTemplate(ctx *gin.Context) {
 	ctx.File(templatePath)
 }
 
-func (c *UserController) ImportUserExcel(ctx *gin.Context) {
-    file, err := ctx.FormFile("file")
-    if err != nil {
-        ctx.JSON(http.StatusBadRequest, gin.H{"message": "file diperlukan"})
-        return
-    }
+func (c *UserController) ImportUserExcelSingleSheet(ctx *gin.Context) {
+	var req requests.ImportUserRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
+		return
+	}
 
-    err = c.Service.ImportFileExcel(file)
-    if err != nil {
-        ctx.JSON(http.StatusBadRequest, gin.H{
-            "message": "gagal parsing file",
-            "error": err.Error(),
-        })
-        return
-    }
+	file, err := ctx.FormFile("file")
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"message": "file diperlukan"})
+		return
+	}
+
+	var sheetName *string
+	if sn := strings.TrimSpace(req.SheetName); sn != "" {
+		req.SheetName = sn
+		sheetName = &req.SheetName
+	}
+
+	err = c.Service.ImportExcelSingleSheet(file, sheetName)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": "gagal parsing file",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, utils.SuccessResponse(
+		http.StatusOK,
+		"Import User Berhasil",
+		nil,
+	))
+}
+
+func (c *UserController) ImportUserExcelMultiSheet(ctx *gin.Context) {
+	file, err := ctx.FormFile("file")
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{"message": "file diperlukan"})
+		return
+	}
+
+	err = c.Service.ImportExcelMultiSheet(file)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": "gagal parsing file",
+			"error":   err.Error(),
+		})
+		return
+	}
 
 	ctx.JSON(http.StatusOK, utils.SuccessResponse(
 		http.StatusOK,
@@ -180,13 +216,13 @@ func (c *UserController) ImportUserExcel(ctx *gin.Context) {
 }
 
 func (c *UserController) ExportUsers(ctx *gin.Context) {
-    file, err := c.Service.ExportUsersExcel()
-    if err != nil {
-        ctx.JSON(http.StatusInternalServerError, gin.H{"message": "gagal export users", "error": err.Error()})
-        return
-    }
+	file, err := c.Service.ExportUsersExcel()
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "gagal export users", "error": err.Error()})
+		return
+	}
 
-    ctx.Header("Content-Description", "File Transfer")
-    ctx.Header("Content-Disposition", "attachment; filename=users_export.xlsx")
-    ctx.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file)
+	ctx.Header("Content-Description", "File Transfer")
+	ctx.Header("Content-Disposition", "attachment; filename=users_export.xlsx")
+	ctx.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", file)
 }
