@@ -260,7 +260,7 @@ func (s *UserService) ImportExcelMultiSheet(fileHeader *multipart.FileHeader) er
 		}
 
 		if existing, _ := s.AuthRepo.GetUserByEmail(email); existing != nil {
-			continue
+			return fmt.Errorf(`email %s sudah terdaftar`, email)
 		}
 
 		hashed, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)

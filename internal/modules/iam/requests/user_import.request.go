@@ -1,5 +1,5 @@
 package requests
 
 type ImportUserRequest struct {
-	SheetName string `json:"sheet_name" binding:"omitempty"`
+    SheetName string `form:"sheet_name" binding:"omitempty"`
 }

@@ -159,7 +159,7 @@ func (c *UserController) DownloadImportTemplate(ctx *gin.Context) {
 
 func (c *UserController) ImportUserExcelSingleSheet(ctx *gin.Context) {
 	var req requests.ImportUserRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
+	if err := ctx.ShouldBind(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse(err.Error()))
 		return
 	}
