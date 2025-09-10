@@ -166,7 +166,7 @@ func (c *UserController) ImportUserExcelSingleSheet(ctx *gin.Context) {
 
 	file, err := ctx.FormFile("file")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"message": "file diperlukan"})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("file diperlukan"))
 		return
 	}
 
@@ -178,10 +178,7 @@ func (c *UserController) ImportUserExcelSingleSheet(ctx *gin.Context) {
 
 	err = c.Service.ImportExcelSingleSheet(file, sheetName)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": "gagal parsing file",
-			"error":   err.Error(),
-		})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("gagal parsing file"))
 		return
 	}
 
@@ -195,16 +192,13 @@ func (c *UserController) ImportUserExcelSingleSheet(ctx *gin.Context) {
 func (c *UserController) ImportUserExcelMultiSheet(ctx *gin.Context) {
 	file, err := ctx.FormFile("file")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{"message": "file diperlukan"})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("file diperlukan"))
 		return
 	}
 
 	err = c.Service.ImportExcelMultiSheet(file)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, gin.H{
-			"message": "gagal parsing file",
-			"error":   err.Error(),
-		})
+		ctx.JSON(http.StatusBadRequest, utils.BadRequestResponse("gagal parsing file"))
 		return
 	}
 
@@ -218,7 +212,7 @@ func (c *UserController) ImportUserExcelMultiSheet(ctx *gin.Context) {
 func (c *UserController) ExportUsers(ctx *gin.Context) {
 	file, err := c.Service.ExportUsersExcel()
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, gin.H{"message": "gagal export users", "error": err.Error()})
+		ctx.JSON(http.StatusInternalServerError, utils.InternalServerErrorResponse(err.Error()))
 		return
 	}
 
