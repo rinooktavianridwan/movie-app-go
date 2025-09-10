@@ -143,7 +143,7 @@ func (s *UserService) ImportFileExcel(fileHeader *multipart.FileHeader) error {
 		return fmt.Errorf("gagal ambil header dari file: %w", err)
 	}
 
-	rows, err := excelUtil.ParseSheetToMapsWithHeader(file, "", headerRow)
+	rows, err := excelUtil.ParseSheetToMapsWithHeader(bytes.NewReader(buf), "", headerRow)
 	if err != nil {
 		return fmt.Errorf("gagal parse file: %w", err)
 	}
