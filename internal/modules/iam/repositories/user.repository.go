@@ -43,3 +43,10 @@ func (r *UserRepository) Update(user *models.User) error {
 func (r *UserRepository) Delete(id uint) error {
 	return r.DB.Delete(&models.User{}, id).Error
 }
+
+func (r *UserRepository) CreateBatch(users []models.User) error {
+    if len(users) == 0 {
+        return nil
+    }
+    return r.DB.Create(&users).Error
+}
